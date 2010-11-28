@@ -1,7 +1,7 @@
 
 REBAR=$(shell which rebar || echo ./rebar)
 
-all: dirs compile
+all: dirs deps compile
 
 ./rebar:
 	erl -noshell -s inets start \

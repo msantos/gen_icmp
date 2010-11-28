@@ -177,7 +177,7 @@ Working with ICMP sockets:
 
 % ICMP host unreachable, empty payload (should contain an IPv4 header
 % and the first 8 bytes of the packet data)
-Packet = gen_icmp:packet([{type, 3}, {code, 0}], <<>>).
+Packet = gen_icmp:packet([{type, 3}, {code, 0}], <<0:160, 0:64>>).
 
 gen_icmp:send(Socket, {127,0,0,1}, Packet).
 
