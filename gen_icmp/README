@@ -1,0 +1,190 @@
+
+gen_icmp aspires to be a simple interface for sending ICMP packets
+from Erlang, just like gen_tcp and gen_udp do for their protocol types;
+incidentally messing up Google searches for whomever someday writes a
+proper gen_icmp module.
+
+gen_icmp uses procket to get a raw socket and abuses gen_udp for the
+socket handling. gen_icmp should work on Linux and BSD's.
+
+gen_icmp isn't even alpha quality yet, I'm just publishing it so I have
+a backup. The interfaces, return values and code will change a lot. If
+you just need an example of sending a ping, also see:
+
+https://github.com/msantos/procket/blob/master/src/icmp.erl
+
+
+EXPORTS
+
+open() -> {ok, Socket} | {error, Error}
+open(Options) -> {ok, Socket} | {error, Error}
+
+    Types   Socket = pid()
+            Options = list()
+
+    See the procket README for options.
+
+    Only the owning process will receive ICMP packets (see
+    controlling_process/2 to change the owner). The process owning the
+    raw socket will receive all ICMP packets sent to the host.
+
+close(Socket) -> ok | {error, Reason}
+
+    Types   Socket = pid()
+            Reason = posix()
+
+send(Socket, Address, Packet) -> 
+
+    Types   Socket = pid()
+            Address = tuple()
+            Packet = binary()
+
+    Like the gen_udp and gen_tcp modules, any process can send ICMP
+    packets, but only the owner will receive the responses.
+
+controlling_process(Socket, Pid) ->
+
+    Types   Socket = pid()
+            Pid = pid()
+
+    Change the process owning the socket and receiving ICMP responses
+    to a new process.
+
+setopts(Socket, Options) ->
+
+    Types   Socket = pid()
+            Options = list()
+
+    For the options, see the inet man page. Simply calls inet:setopts/2
+    on the gen_udp socket.
+
+ping(Host) -> Responses
+ping(Host, Timeout) -> Responses
+ping(Socket, Hosts, Id, Sequence, Timeout) -> Responses
+
+    Types   Socket = pid()
+            Host = Address | Hostname | Hosts
+            Address = tuple()
+            Hostname = string()
+            Hosts = [ tuple() | string() ]
+            Id = uint16()
+            Sequence = uint16()
+            Timeout = int() 
+            Responses = [ Response ]
+            Response = {ok, Address, {Elapsed, Payload}} | {{error, Error}, Address, Payload} |
+                {{error, timeout}, Address}
+            Elapsed = int()
+            Payload = binary()
+            Error = host_unreachable | time_exceeded
+
+    Convenience function to send a single ping packet. The argument to
+    ping/1 can be either a hostname or a list of hostnames.
+
+    Id and sequence are used to differentiate ping responses. Usually,
+    the sequence is incremented for each ping in one run.
+
+    A list of responses is returned. If the ping was successful, the
+    elapsed time is included (calculated by subtracting the current time
+    from the time we sent in the ICMP ECHO packet and returned to us in
+    the ICMP ECHOREPLY payload).
+
+    The timeout is set for all ICMP packets and is set after all packets
+    have been sent out.
+
+    ping/1 and ping/2 open and close an ICMP socket for the user. For
+    best performance, ping/5 should be used instead, with the socket
+    being maintained between runs.
+
+    Duplicate hosts in the address list are removed.
+
+    The timeout defaults to 5 seconds.
+
+echo(Id, Sequence) -> Packet
+
+    Types   Id = uint16()
+            Sequence = uint16()
+            Packet = binary()
+
+    Creates an ICMP echo packet with the results of erlang:now() used
+    as the timestamp and a payload consisting of ASCII 32 to 75.
+
+echo(Id, Sequence, Payload) -> Packet
+
+    Types   Id = uint16()
+            Sequence = uint16()
+            Payload = binary()
+            Packet = binary()
+
+    Creates an ICMP echo packet with the results of erlang:now() used
+    as the timestamp and a user specified payload (which should pad the
+    packet to 64 bytes).
+
+
+packet(Header, Payload) -> Packet
+
+    Types   Header = [ #icmp{} | Options ]
+            Options = [ Opts ]
+            Opts = [{type, Type} | {code, Code} | {id, Id} | {sequence, Sequence} |
+                        {gateway, Gateway} | {mtu, MTU} | {pointer, Pointer} |
+                        {ts_orig, TS_orig} | {ts_recv, TS_recv} | {ts_tx, TS_tx} ]
+            Type = uint8()
+            Code = uint8()
+            Id = uint16()
+            Sequence = uint16()
+            Payload = binary()
+            Packet = binary()
+
+    Convenience function for creating arbitrary ICMP packets. This
+    function will calculate the ICMP checksum and insert it into the
+    packet.
+
+
+COMPILING
+
+$ make
+
+Also see the README for procket for additional setup (the procket
+executables needs superuser privileges).
+
+
+EXAMPLE
+
+Simple ping interface:
+
+1> gen_icmp:ping("www.yahoo.com").
+[{ok,{67,195,160,76},
+    {51891,
+    <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+
+2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
+[{{error,host_unreachable},
+  {192,168,213,4},
+  <<69,0,0,84,0,0,64,0,64,1,14,220,192,168,213,119,192,168,
+    213,4,8,0,106,183,170,...>>},
+  {ok,{193,180,168,20},
+    {125640,
+    <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+  {ok,{192,0,32,10},
+    {95598,<<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+  {ok,{69,147,125,65},
+    {30749,
+  <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+
+
+Working with ICMP sockets:
+
+{ok, Socket} = gen_icmp:open().
+
+% ICMP host unreachable, empty payload (should contain an IPv4 header
+% and the first 8 bytes of the packet data)
+Packet = gen_icmp:packet([{type, 3}, {code, 0}], <<>>).
+
+gen_icmp:send(Socket, {127,0,0,1}, Packet).
+
+
+
+TODO
+
+Lots.
+
+
