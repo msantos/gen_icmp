@@ -71,8 +71,8 @@ ping(Socket, Hosts, Id, Sequence, Timeout) -> Responses
             Sequence = uint16()
             Timeout = int() 
             Responses = [ Response ]
-            Response = {ok, Address, {Elapsed, Payload}} | {{error, Error}, Address, Payload} |
-                {{error, timeout}, Address}
+            Response = {ok, Address, {Id, Sequence, Elapsed, Payload}} |
+                {{error, Error}, Address, {Id, Sequence, Payload}} | {{error, timeout}, Address}
             Elapsed = int()
             Payload = binary()
             Error = host_unreachable | time_exceeded
