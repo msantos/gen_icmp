@@ -38,6 +38,7 @@
 -define(PING_TIMEOUT, 5000).
 
 -export([open/0, open/1, close/1, send/3, controlling_process/2, setopts/2]).
+-export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/5]).
 -export([
         echo/2, echo/3,
@@ -70,6 +71,11 @@ close(Ref) when is_pid(Ref) ->
 
 send(Ref, Address, Packet) when is_pid(Ref) ->
     gen_server:call(Ref, {send, Address, Packet}).
+
+recv(Ref, Length) ->
+    recv(Ref, Length, infinity).
+recv(Ref, Length, Timeout) ->
+    gen_server:call(Ref, {recv, Length, Timeout}, infinity).
 
 controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
     gen_server:call(Ref, {controlling_process, Pid}).
@@ -119,6 +125,8 @@ handle_call(close, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
     {stop, normal, gen_udp:close(Socket), State};
 handle_call({send, IP, Packet}, _From, #state{s = Socket} = State) ->
     {reply, gen_udp:send(Socket, IP, 0, Packet), State};
+handle_call({recv, Length, Timeout}, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
+    {reply, gen_udp:recv(Socket, Length, Timeout), State};
 handle_call({controlling_process, Pid}, {Owner,_}, #state{pid = Owner} = State) ->
     {reply, ok, State#state{pid = Pid}};
 handle_call({setopts, Options}, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
