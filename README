@@ -17,16 +17,19 @@ https://github.com/msantos/procket/blob/master/src/icmp.erl
 EXPORTS
 
 open() -> {ok, Socket} | {error, Error}
-open(Options) -> {ok, Socket} | {error, Error}
+open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
 
     Types   Socket = pid()
-            Options = list()
+            RawOptions = list()
+            SocketOptions = SocketOpt
+            SocketOpt = [ list | binary | {active, true} |
+                {active, once} | {active, false} ]
 
-    See the procket README for options.
+    See the procket README for the raw socket options.
 
     Only the owning process will receive ICMP packets (see
     controlling_process/2 to change the owner). The process owning the
-    raw socket will receive all ICMP packets sent to the host.
+    raw socket will receive all ICMP packets s<F5>ent to the host.
 
 close(Socket) -> ok | {error, Reason}
 

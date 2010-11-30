@@ -62,9 +62,9 @@
 %%% API
 %%-------------------------------------------------------------------------
 open() ->
-    open([]).
-open(Options) ->
-    start_link(Options).
+    open([], []).
+open(RawOpts, SockOpts) ->
+    start_link(RawOpts, SockOpts).
 
 close(Ref) when is_pid(Ref) ->
     gen_server:call(Ref, close, infinity).
@@ -108,13 +108,13 @@ ping(Socket, Hosts, Id, Seq, Timeout) when is_pid(Socket), is_list(Hosts),
 %%-------------------------------------------------------------------------
 %%% Callbacks
 %%-------------------------------------------------------------------------
-start_link(Options) ->
+start_link(RawOpts, SockOpts) ->
     Pid = self(),
-    gen_server:start_link(?MODULE, [Pid, Options], []).
+    gen_server:start_link(?MODULE, [Pid, RawOpts, SockOpts], []).
 
-init([Pid, Options]) ->
-    {ok, FD} = procket:listen(0, Options ++ [{protocol, icmp}, {type, raw}, {family, inet}]),
-    {ok, Socket} = gen_udp:open(0, [binary, {fd, FD}]),
+init([Pid, RawOpts, SockOpts]) ->
+    {ok, FD} = procket:listen(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, inet}]),
+    {ok, Socket} = gen_udp:open(0, SockOpts ++ [binary, {fd, FD}]),
     {ok, #state{
             pid = Pid,
             raw = FD,
