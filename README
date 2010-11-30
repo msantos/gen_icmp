@@ -29,7 +29,7 @@ open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
 
     Only the owning process will receive ICMP packets (see
     controlling_process/2 to change the owner). The process owning the
-    raw socket will receive all ICMP packets s<F5>ent to the host.
+    raw socket will receive all ICMP packets sent to the host.
 
 close(Socket) -> ok | {error, Reason}
 
@@ -98,6 +98,9 @@ ping(Socket, Hosts, Id, Sequence, Timeout) -> Responses
 
     Convenience function to send a single ping packet. The argument to
     ping/1 can be either a hostname or a list of hostnames.
+
+    The ping/5 function blocks until either an ICMP ECHO REPLY is received
+    from all hosts or Timeout is reached.
 
     Id and sequence are used to differentiate ping responses. Usually,
     the sequence is incremented for each ping in one run.

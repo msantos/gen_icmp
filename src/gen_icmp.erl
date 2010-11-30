@@ -37,7 +37,7 @@
 
 -define(PING_TIMEOUT, 5000).
 
--export([open/0, open/1, close/1, send/3, controlling_process/2, setopts/2]).
+-export([open/0, open/2, close/1, send/3, controlling_process/2, setopts/2]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/5]).
 -export([
@@ -46,7 +46,7 @@
         packet/2
     ]).
 
--export([start_link/1]).
+-export([start_link/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -279,7 +279,7 @@ ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
         {icmp, Socket, Address,
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq1:16, Mega:32, Sec:32, USec:32, Data/binary>>} ->
             T = timer:now_diff(now(), {Mega,Sec,USec}),
-            ping_loop(Socket, TRef, Hosts -- [Address], [{ok, Address, {Id, Seq1, T, Data}}|Acc], Id, Seq);
+            ping_loop(Socket, TRef, Hosts -- [Address], [{ok, Address, {{Id, Seq1, T}, Data}}|Acc], Id, Seq);
         {icmp, Socket, _Address,
             <<Type:8, Code:8, _Checksum1:16, _Unused:32,
             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
@@ -291,7 +291,7 @@ ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
             ping_loop(Socket, TRef, Hosts -- [DA],
-                [{{error, gen_icmp:type(Type, Code)}, DA, {Id, Seq1, Payload}}|Acc],
+                [{{error, gen_icmp:type(Type, Code)}, DA, {{Id, Seq1}, Payload}}|Acc],
                 Id, Seq);
         {icmp, Socket, Address, <<Type:8, Code:8, _Checksum:16, Data/binary>>} ->
             ping_loop(Socket, TRef, Hosts -- [Address], [{{error, gen_icmp:type(Type, Code)}, Address, Data}|Acc], Id, Seq);
