@@ -67,10 +67,10 @@ open(Options) ->
     start_link(Options).
 
 close(Ref) when is_pid(Ref) ->
-    gen_server:call(Ref, close).
+    gen_server:call(Ref, close, infinity).
 
 send(Ref, Address, Packet) when is_pid(Ref) ->
-    gen_server:call(Ref, {send, Address, Packet}).
+    gen_server:call(Ref, {send, Address, Packet}, infinity).
 
 recv(Ref, Length) ->
     recv(Ref, Length, infinity).
@@ -78,10 +78,10 @@ recv(Ref, Length, Timeout) ->
     gen_server:call(Ref, {recv, Length, Timeout}, infinity).
 
 controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
-    gen_server:call(Ref, {controlling_process, Pid}).
+    gen_server:call(Ref, {controlling_process, Pid}, infinity).
 
 setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
-    gen_server:call(Ref, {setopts, Options}).
+    gen_server:call(Ref, {setopts, Options}, infinity).
 
 ping(Host) ->
     ping(Host, ?PING_TIMEOUT).
