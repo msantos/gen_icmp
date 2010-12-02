@@ -22,8 +22,8 @@ open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
     Types   Socket = pid()
             RawOptions = list()
             SocketOptions = SocketOpt
-            SocketOpt = [ list | binary | {active, true} |
-                {active, once} | {active, false} ]
+            SocketOpt = [ {active, true} | {active, once} |
+                {active, false} ]
 
     See the procket README for the raw socket options.
 
@@ -35,6 +35,8 @@ close(Socket) -> ok | {error, Reason}
 
     Types   Socket = pid()
             Reason = posix()
+
+    Close the ICMP socket.
 
 send(Socket, Address, Packet) -> 
 
@@ -74,7 +76,7 @@ setopts(Socket, Options) ->
     Types   Socket = pid()
             Options = list()
 
-    For the options, see the inet man page. Simply calls inet:setopts/2
+    For options, see the inet man page. Simply calls inet:setopts/2
     on the gen_udp socket.
 
 ping(Host) -> Responses
@@ -166,7 +168,7 @@ COMPILING
 $ make
 
 Also see the README for procket for additional setup (the procket
-executables needs superuser privileges).
+executable needs superuser privileges).
 
 
 EXAMPLE
@@ -175,23 +177,25 @@ Simple ping interface:
 
 1> gen_icmp:ping("www.yahoo.com").
 [{ok,{67,195,160,76},
-    {51891,
-    <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+     {{38223,0,47888},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
 
 2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
+
 [{{error,host_unreachable},
   {192,168,213,4},
-  <<69,0,0,84,0,0,64,0,64,1,14,220,192,168,213,119,192,168,
-    213,4,8,0,106,183,170,...>>},
-  {ok,{193,180,168,20},
-    {125640,
-    <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-  {ok,{192,0,32,10},
-    {95598,<<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-  {ok,{69,147,125,65},
-    {30749,
-  <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
-
+  {{2882,0},
+  <<69,0,0,84,0,0,64,0,64,1,14,220,192,168,213,119,192,
+    168,213,4,8,0,29,...>>}},
+ {ok,{193,180,168,20},
+     {{2882,0,126078},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+ {ok,{192,0,32,10},
+     {{2882,0,94281},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+ {ok,{69,147,125,65},
+     {{2882,0,29866},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
 
 Working with ICMP sockets:
 
