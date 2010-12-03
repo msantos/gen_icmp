@@ -31,6 +31,14 @@ open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
     controlling_process/2 to change the owner). The process owning the
     raw socket will receive all ICMP packets sent to the host.
 
+    Messages sent to the controlling process are:
+
+    {icmp, Socket, Address, Packet}
+
+    Where Socket is the pid of the gen_icmp process, Address is a tuple
+    representing the IPv4 source address and Packet is the complete
+    ICMP packet including the ICMP headers.
+
 close(Socket) -> ok | {error, Reason}
 
     Types   Socket = pid()
@@ -82,6 +90,7 @@ setopts(Socket, Options) ->
 ping(Host) -> Responses
 ping(Host, Timeout) -> Responses
 ping(Socket, Hosts, Id, Sequence, Timeout) -> Responses
+ping(Socket, Hosts, Id, Sequence, Timeout, Data) -> Responses
 
     Types   Socket = pid()
             Host = Address | Hostname | Hosts
@@ -91,6 +100,7 @@ ping(Socket, Hosts, Id, Sequence, Timeout) -> Responses
             Id = uint16()
             Sequence = uint16()
             Timeout = int() 
+            Data = binary()
             Responses = [ Response ]
             Response = {ok, Address, {Id, Sequence, Elapsed, Payload}} |
                 {{error, Error}, Address, {Id, Sequence, Payload}} | {{error, timeout}, Address}

@@ -39,7 +39,7 @@
 
 -export([open/0, open/2, close/1, send/3, controlling_process/2, setopts/2]).
 -export([recv/2, recv/3]).
--export([ping/1, ping/2, ping/5]).
+-export([ping/1, ping/2, ping/5, ping/6]).
 -export([
         echo/2, echo/3,
         type/2,
@@ -95,12 +95,16 @@ ping(Hosts, Timeout) ->
     Res = ping(Socket, Hosts, crypto:rand_uniform(0, 16#FFFF), 0, Timeout),
     gen_icmp:close(Socket),
     Res.
+ping(Socket, Hosts, Id, Seq, Timeout) ->
+    Data = payload(echo),
+    ping(Socket, Hosts, Id, Seq, Timeout, Data).
 
-ping(Socket, Hosts, Id, Seq, Timeout) when is_pid(Socket), is_list(Hosts),
+ping(Socket, Hosts, Id, Seq, Timeout, Data) when is_pid(Socket), is_list(Hosts),
     is_integer(Id), Id >= 0, Id < 16#FFFF,
-    is_integer(Seq), Seq >= 0, Seq < 16#FFFF ->
+    is_integer(Seq), Seq >= 0, Seq < 16#FFFF,
+    is_binary(Data) ->
     Addresses = addr_list(Hosts),
-    [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq)) end) || Addr <- Addresses ],
+    [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || Addr <- Addresses ],
     Response = ping_reply(Socket, Addresses, Id, Seq, Timeout),
     ping_timeout(Addresses, Response).
 
@@ -211,7 +215,7 @@ packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
 
 echo(Id, Seq) ->
     % Pad packet to 64 bytes
-    echo(Id, Seq, list_to_binary(lists:seq($\s, $K))).
+    echo(Id, Seq, payload(echo)).
 echo(Id, Seq, Payload) ->
     {Mega,Sec,USec} = erlang:now(),
 
@@ -221,6 +225,7 @@ echo(Id, Seq, Payload) ->
         {id, Id},
         {sequence, Seq}
     ], <<Mega:32,Sec:32,USec:32, Payload/binary>>).
+
 
 
 %%-------------------------------------------------------------------------
@@ -240,6 +245,8 @@ type(?ICMP_ECHO, _Code) -> echo;
 type(?ICMP_ECHOREPLY, _Code) -> echoreply;
 type(Type, Code) -> {unknown, Type, Code}.
 
+payload(echo) ->
+    list_to_binary(lists:seq($\s, $K)).
 
 %%
 %% ping
