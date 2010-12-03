@@ -284,21 +284,21 @@ ping_loop(_Socket, TRef, [], Acc, _Id, _Seq) ->
 ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
     receive
         {icmp, Socket, Address,
-            <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq1:16, Mega:32, Sec:32, USec:32, Data/binary>>} ->
+            <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Mega:32, Sec:32, USec:32, Data/binary>>} ->
             T = timer:now_diff(now(), {Mega,Sec,USec}),
-            ping_loop(Socket, TRef, Hosts -- [Address], [{ok, Address, {{Id, Seq1, T}, Data}}|Acc], Id, Seq);
-        {icmp, Socket, _Address,
+            ping_loop(Socket, TRef, Hosts -- [Address], [{ok, Address, {{Id, Seq, T}, Data}}|Acc], Id, Seq);
+        {icmp, Socket, Saddr,
             <<Type:8, Code:8, _Checksum1:16, _Unused:32,
             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
             _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
-            _SA1:8, _SA2:8, _SA3:8, _SA4:8,
+            SA1:8, SA2:8, SA3:8, SA4:8,
             DA1:8, DA2:8, DA3:8, DA4:8,
-            ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq1:16,
-            _/binary>> = Data} when Type == ?ICMP_DEST_UNREACH; Type == ?ICMP_TIME_EXCEEDED ->
+            ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq:16,
+            _/binary>> = Data} when Saddr == {SA1,SA2,SA3,SA4} ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
             ping_loop(Socket, TRef, Hosts -- [DA],
-                [{{error, gen_icmp:type(Type, Code)}, DA, {{Id, Seq1}, Payload}}|Acc],
+                [{{error, gen_icmp:type(Type, Code)}, DA, {{Id, Seq}, Payload}}|Acc],
                 Id, Seq);
         {icmp, timeout} ->
             ping_loop(Socket, TRef, [], Acc, Id, Seq)
