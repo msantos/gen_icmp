@@ -287,7 +287,7 @@ ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
             _SA1:8, _SA2:8, _SA3:8, _SA4:8,
             DA1:8, DA2:8, DA3:8, DA4:8,
             ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq1:16,
-            _/binary>> = Data} when (Type == ?ICMP_DEST_UNREACH orelse Type == ?ICMP_TIME_EXCEEDED) ->
+            _/binary>> = Data} when Type == ?ICMP_DEST_UNREACH; Type == ?ICMP_TIME_EXCEEDED ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
             ping_loop(Socket, TRef, Hosts -- [DA],
