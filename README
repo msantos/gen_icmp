@@ -46,11 +46,12 @@ close(Socket) -> ok | {error, Reason}
 
     Close the ICMP socket.
 
-send(Socket, Address, Packet) -> 
+send(Socket, Address, Packet) -> ok | {error, Reason}
 
     Types   Socket = pid()
             Address = tuple()
             Packet = binary()
+            Reason = not_owner | posix()
 
     Like the gen_udp and gen_tcp modules, any process can send ICMP
     packets but only the owner will receive the responses.
