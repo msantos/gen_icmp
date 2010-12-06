@@ -3,7 +3,8 @@
     {description, "Generate ICMP packets"},
     {vsn, "0.01"},
     {modules, [
-        gen_icmp
+        gen_icmp,
+        ptun
             ]},
     {registered, []},
     {applications, [
