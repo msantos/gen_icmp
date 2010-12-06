@@ -108,7 +108,7 @@ ping(Socket, Hosts, Options) -> Responses
                 {{error, Error}, Address, {Id, Sequence, Payload}} | {{error, timeout}, Address}
             Elapsed = int()
             Payload = binary()
-            Error = host_unreachable | time_exceeded
+            Error = unreach_host | timxceed_intrans
 
     Convenience function to send a single ping packet. The argument to
     ping/1 can be either a hostname or a list of hostnames.
@@ -163,8 +163,14 @@ packet(Header, Payload) -> Packet
             Opts = [{type, Type} | {code, Code} | {id, Id} | {sequence, Sequence} |
                         {gateway, Gateway} | {mtu, MTU} | {pointer, Pointer} |
                         {ts_orig, TS_orig} | {ts_recv, TS_recv} | {ts_tx, TS_tx} ]
-            Type = uint8()
-            Code = uint8()
+            Type = uint8() | ICMP_type
+            Code = uint8() | ICMP_code
+            ICMP_type = echoreply | dest_unreach | source_quench | redirect | echo |
+                time_exceeded | parameterprob | timestamp | timestampreply | info_request |
+                info_reply | address | addressreply
+            ICMP_code = unreach_net | unreach_host | unreach_protocol | unreach_port |
+                unreach_needfrag | unreach_srcfail | redirect_net | redirect_host |
+                redirect_tosnet | redirect_toshost | timxceed_intrans | timxceed_reass
             Id = uint16()
             Sequence = uint16()
             Payload = binary()
@@ -194,7 +200,7 @@ Simple ping interface:
 
 2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
 
-[{{error,host_unreachable},
+[{{error,unreach_host},
   {192,168,213,4},
   {{2882,0},
   <<69,0,0,84,0,0,64,0,64,1,14,220,192,168,213,119,192,

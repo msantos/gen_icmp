@@ -42,7 +42,7 @@
 -export([ping/1, ping/2, ping/3]).
 -export([
         echo/2, echo/3,
-        type/2,
+        type/1, code/1,
         packet/2
     ]).
 
@@ -175,8 +175,8 @@ code_change(_OldVsn, State, _Extra) ->
 packet(Header, Payload) when is_list(Header), is_binary(Payload) ->
     Default = #icmp{},
 
-    Type = type(proplists:get_value(type, Header, Default#icmp.type)),
-    Code = code(proplists:get_value(code, Header, Default#icmp.code)),
+    Type = type_to_uint8(proplists:get_value(type, Header, Default#icmp.type)),
+    Code = code_to_uint8(proplists:get_value(code, Header, Default#icmp.code)),
 
     Id = proplists:get_value(id, Header, Default#icmp.id),
     Seq = proplists:get_value(sequence, Header, Default#icmp.sequence),
@@ -213,40 +213,128 @@ packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
         Payload
     ]).
 
+type_to_uint8(Type) when is_integer(Type) -> Type;
+type_to_uint8(Type) when is_atom(Type) -> type(Type).
+
+code_to_uint8(Code) when is_integer(Code) -> Code;
+code_to_uint8(Code) when is_atom(Code) -> code(Code).
+
 echo(Id, Seq) ->
     % Pad packet to 64 bytes
     echo(Id, Seq, payload(echo)).
 echo(Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
     is_integer(Seq), Seq >= 0, Seq < 16#FFFF, is_binary(Payload) ->
-    {Mega,Sec,USec} = erlang:now(),
     packet([
-        {type, ?ICMP_ECHO},
-        {code, 0},
+        {type, echo},
         {id, Id},
         {sequence, Seq}
-    ], <<Mega:32,Sec:32,USec:32, Payload/binary>>).
+    ], Payload).
 
+
+%%
+%% ICMP control message: types
+%%
+type(?ICMP_ECHOREPLY) -> echoreply;
+type(?ICMP_DEST_UNREACH) -> dest_unreach;
+type(?ICMP_SOURCE_QUENCH) -> source_quench;
+type(?ICMP_REDIRECT) -> redirect;
+type(?ICMP_ECHO) -> echo;
+type(?ICMP_TIME_EXCEEDED) -> time_exceeded;
+type(?ICMP_PARAMETERPROB) -> parameterprob;
+type(?ICMP_TIMESTAMP) -> timestamp;
+type(?ICMP_TIMESTAMPREPLY) -> timestampreply;
+type(?ICMP_INFO_REQUEST) -> info_request;
+type(?ICMP_INFO_REPLY) -> info_reply;
+type(?ICMP_ADDRESS) -> address;
+type(?ICMP_ADDRESSREPLY) -> addressreply;
+
+type(echoreply) -> ?ICMP_ECHOREPLY;
+type(dest_unreach) -> ?ICMP_DEST_UNREACH;
+type(source_quench) -> ?ICMP_SOURCE_QUENCH;
+type(redirect) -> ?ICMP_REDIRECT;
+type(echo) -> ?ICMP_ECHO;
+type(time_exceeded) -> ?ICMP_TIME_EXCEEDED;
+type(parameterprob) -> ?ICMP_PARAMETERPROB;
+type(timestamp) -> ?ICMP_TIMESTAMP;
+type(timestampreply) -> ?ICMP_TIMESTAMPREPLY;
+type(info_request) -> ?ICMP_INFO_REQUEST;
+type(info_reply) -> ?ICMP_INFO_REPLY;
+type(address) -> ?ICMP_ADDRESS;
+type(addressreply) -> ?ICMP_ADDRESSREPLY.
+
+%%
+%% ICMP control message: codes
+%%
+
+% destination unreachable
+code(unreach_net) -> ?ICMP_UNREACH_NET;
+code(unreach_host) -> ?ICMP_UNREACH_HOST;
+code(unreach_protocol) -> ?ICMP_UNREACH_PROTOCOL;
+code(unreach_port) -> ?ICMP_UNREACH_PORT;
+code(unreach_needfrag) -> ?ICMP_UNREACH_NEEDFRAG;
+code(unreach_srcfail) -> ?ICMP_UNREACH_SRCFAIL;
+
+% redirect
+code(redirect_net) -> ?ICMP_REDIRECT_NET;
+code(redirect_host) -> ?ICMP_REDIRECT_HOST;
+code(redirect_tosnet) -> ?ICMP_REDIRECT_TOSNET;
+code(redirect_toshost) -> ?ICMP_REDIRECT_TOSHOST;
+
+% time_exceeded
+code(timxceed_intrans) -> ?ICMP_TIMXCEED_INTRANS;
+code(timxceed_reass) -> ?ICMP_TIMXCEED_REASS;
+
+% XXX create a fake code so:
+% XXX e.g., code(code({?ICMP_ECHO, 0})) == 0
+code(Code) when Code == echoreply; Code == source_quench; Code == echo;
+    Code == parameterprob; Code == timestamp; Code == timestampreply;
+    Code == info_request; Code == info_reply; Code == address;
+    Code == addressreply -> 0;
+
+code({?ICMP_ECHOREPLY, 0}) -> echoreply;
+
+code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_NET}) -> unreach_net;
+code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_HOST}) -> unreach_host;
+code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_PROTOCOL}) -> unreach_protocol;
+code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_PORT}) -> unreach_port;
+code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_NEEDFRAG}) -> unreach_needfrag;
+code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_SRCFAIL}) -> unreach_srcfail;
+
+code({?ICMP_SOURCE_QUENCH, 0}) -> source_quench;
+
+code({?ICMP_REDIRECT, ?ICMP_REDIRECT_NET}) -> redirect_net;
+code({?ICMP_REDIRECT, ?ICMP_REDIRECT_HOST}) -> redirect_host;
+code({?ICMP_REDIRECT, ?ICMP_REDIRECT_TOSNET}) -> redirect_tosnet;
+code({?ICMP_REDIRECT, ?ICMP_REDIRECT_TOSHOST}) -> redirect_toshost;
+
+code({?ICMP_ECHO, 0}) -> echo;
+
+code({?ICMP_TIME_EXCEEDED, ?ICMP_TIMXCEED_INTRANS}) -> timxceed_intrans;
+code({?ICMP_TIME_EXCEEDED, ?ICMP_TIMXCEED_REASS}) -> timxceed_reass;
+
+code({?ICMP_PARAMETERPROB, 0}) -> parameterprob;
+
+code({?ICMP_TIMESTAMP, 0}) -> timestamp;
+code({?ICMP_TIMESTAMPREPLY, 0}) -> timestampreply;
+
+code({?ICMP_INFO_REQUEST, 0}) -> info_request;
+code({?ICMP_INFO_REPLY, 0}) -> info_reply;
+
+code({?ICMP_ADDRESS, 0}) -> address;
+code({?ICMP_ADDRESSREPLY, 0}) -> addressreply;
+
+code({Type, Code}) -> {unknown, type(Type), code(Code)}.
+
+
+% Default ICMP echo payload
+payload(echo) ->
+    {Mega,Sec,USec} = erlang:now(),
+    <<Mega:32,Sec:32,USec:32, (list_to_binary(lists:seq($\s, $K)))/binary>>.
 
 
 %%-------------------------------------------------------------------------
 %%% Internal Functions
 %%-------------------------------------------------------------------------
-type(?ICMP_DEST_UNREACH, 0) -> net_unreachable;
-type(?ICMP_DEST_UNREACH, 1) -> host_unreachable;
-type(?ICMP_DEST_UNREACH, 2) -> protocol_unreachable;
-type(?ICMP_DEST_UNREACH, 3) -> port_unreachable;
-type(?ICMP_DEST_UNREACH, 4) -> frag_needed;
-type(?ICMP_DEST_UNREACH, 5) -> source_route_failed;
-
-type(?ICMP_TIME_EXCEEDED, _Code) -> time_exceeded;
-type(?ICMP_PARAMETERPROB, _Code) -> parameter_problem;
-type(?ICMP_REDIRECT, _Code) -> redirect;
-type(?ICMP_ECHO, _Code) -> echo;
-type(?ICMP_ECHOREPLY, _Code) -> echoreply;
-type(Type, Code) -> {unknown, Type, Code}.
-
-payload(echo) ->
-    list_to_binary(lists:seq($\s, $K)).
 
 %%
 %% ping
@@ -298,7 +386,7 @@ ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
             ping_loop(Socket, TRef, Hosts -- [DA],
-                [{{error, gen_icmp:type(Type, Code)}, DA, {{Id, Seq}, Payload}}|Acc],
+                [{{error, code({Type, Code})}, DA, {{Id, Seq}, Payload}}|Acc],
                 Id, Seq);
         {icmp, timeout} ->
             ping_loop(Socket, TRef, [], Acc, Id, Seq)
