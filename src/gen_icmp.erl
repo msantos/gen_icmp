@@ -363,7 +363,7 @@ ping_timeout(A,B) ->
 
 ping_reply(Socket, Hosts, Id, Seq, Timeout) ->
     Pid = self(),
-    TRef = erlang:send_after(Timeout, Pid, {icmp, timeout}),
+    TRef = erlang:send_after(Timeout, Pid, {icmp, Socket, timeout}),
     ping_loop(Socket, TRef, Hosts, [], Id, Seq).
 
 ping_loop(_Socket, TRef, [], Acc, _Id, _Seq) ->
@@ -388,7 +388,7 @@ ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
             ping_loop(Socket, TRef, Hosts -- [DA],
                 [{{error, code({Type, Code})}, DA, {{Id, Seq}, Payload}}|Acc],
                 Id, Seq);
-        {icmp, timeout} ->
+        {icmp, Socket, timeout} ->
             ping_loop(Socket, TRef, [], Acc, Id, Seq)
     end.
 
