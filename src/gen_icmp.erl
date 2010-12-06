@@ -173,18 +173,20 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% Create an ICMP packet
 packet(Header, Payload) when is_list(Header), is_binary(Payload) ->
-    Type = proplists:get_value(type, Header, #icmp.type),
-    Code = proplists:get_value(code, Header, #icmp.code),
+    Default = #icmp{},
 
-    Id = proplists:get_value(id, Header, #icmp.id),
-    Seq = proplists:get_value(sequence, Header, #icmp.sequence),
-    GW = proplists:get_value(gateway, Header, #icmp.gateway),
-    UN = proplists:get_value(un, Header, #icmp.un),
-    MTU = proplists:get_value(mtu, Header, #icmp.mtu),
-    Pointer = proplists:get_value(pointer, Header, #icmp.pointer),
-    TS_orig = proplists:get_value(ts_orig, Header, #icmp.ts_orig),
-    TS_recv = proplists:get_value(ts_recv, Header, #icmp.ts_recv),
-    TS_tx = proplists:get_value(ts_tx, Header, #icmp.ts_tx),
+    Type = type(proplists:get_value(type, Header, Default#icmp.type)),
+    Code = code(proplists:get_value(code, Header, Default#icmp.code)),
+
+    Id = proplists:get_value(id, Header, Default#icmp.id),
+    Seq = proplists:get_value(sequence, Header, Default#icmp.sequence),
+    GW = proplists:get_value(gateway, Header, Default#icmp.gateway),
+    UN = proplists:get_value(un, Header, Default#icmp.un),
+    MTU = proplists:get_value(mtu, Header, Default#icmp.mtu),
+    Pointer = proplists:get_value(pointer, Header, Default#icmp.pointer),
+    TS_orig = proplists:get_value(ts_orig, Header, Default#icmp.ts_orig),
+    TS_recv = proplists:get_value(ts_recv, Header, Default#icmp.ts_recv),
+    TS_tx = proplists:get_value(ts_tx, Header, Default#icmp.ts_tx),
 
     ICMP = #icmp{
             type = Type,
