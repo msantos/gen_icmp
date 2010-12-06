@@ -39,7 +39,7 @@
 
 -export([open/0, open/2, close/1, send/3, controlling_process/2, setopts/2]).
 -export([recv/2, recv/3]).
--export([ping/1, ping/2, ping/5, ping/6]).
+-export([ping/1, ping/2, ping/3]).
 -export([
         echo/2, echo/3,
         type/2,
@@ -84,25 +84,23 @@ setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
     gen_server:call(Ref, {setopts, Options}, infinity).
 
 ping(Host) ->
-    ping(Host, ?PING_TIMEOUT).
+    ping(Host, []).
 
-ping(Host, Timeout) when is_tuple(Host) ->
-    ping([Host], Timeout);
-ping([Char|_] = Host, Timeout) when is_integer(Char) ->
-    ping([Host], Timeout);
-ping(Hosts, Timeout) ->
+ping(Host, Options) when is_tuple(Host) ->
+    ping([Host], Options);
+ping([Char|_] = Host, Options) when is_integer(Char) ->
+    ping([Host], Options);
+ping(Hosts, Options) ->
     {ok, Socket} = gen_icmp:open(),
-    Res = ping(Socket, Hosts, crypto:rand_uniform(0, 16#FFFF), 0, Timeout),
+    Res = ping(Socket, Hosts, Options),
     gen_icmp:close(Socket),
     Res.
-ping(Socket, Hosts, Id, Seq, Timeout) ->
-    Data = payload(echo),
-    ping(Socket, Hosts, Id, Seq, Timeout, Data).
 
-ping(Socket, Hosts, Id, Seq, Timeout, Data) when is_pid(Socket), is_list(Hosts),
-    is_integer(Id), Id >= 0, Id < 16#FFFF,
-    is_integer(Seq), Seq >= 0, Seq < 16#FFFF,
-    is_binary(Data) ->
+ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Options) ->
+    Id = proplists:get_value(id, Options, erlang:phash2(self(), 16#FFFF)),
+    Seq = proplists:get_value(sequence, Options, 0),
+    Data = proplists:get_value(data, Options, payload(echo)),
+    Timeout = proplists:get_value(timeout, Options, ?PING_TIMEOUT),
     Addresses = addr_list(Hosts),
     [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || Addr <- Addresses ],
     Response = ping_reply(Socket, Addresses, Id, Seq, Timeout),
@@ -216,9 +214,9 @@ packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
 echo(Id, Seq) ->
     % Pad packet to 64 bytes
     echo(Id, Seq, payload(echo)).
-echo(Id, Seq, Payload) ->
+echo(Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
+    is_integer(Seq), Seq >= 0, Seq < 16#FFFF, is_binary(Payload) ->
     {Mega,Sec,USec} = erlang:now(),
-
     packet([
         {type, ?ICMP_ECHO},
         {code, 0},

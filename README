@@ -89,15 +89,16 @@ setopts(Socket, Options) ->
     on the gen_udp socket.
 
 ping(Host) -> Responses
-ping(Host, Timeout) -> Responses
-ping(Socket, Hosts, Id, Sequence, Timeout) -> Responses
-ping(Socket, Hosts, Id, Sequence, Timeout, Data) -> Responses
+ping(Host, Options) -> Responses
+ping(Socket, Hosts, Options) -> Responses
 
     Types   Socket = pid()
             Host = Address | Hostname | Hosts
             Address = tuple()
             Hostname = string()
             Hosts = [ tuple() | string() ]
+            Options = [ Option ]
+            Option = {id, Id} | {sequence, Sequence} | {timeout, Timeout} | {data, Data}
             Id = uint16()
             Sequence = uint16()
             Timeout = int() 
