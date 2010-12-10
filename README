@@ -98,7 +98,8 @@ ping(Socket, Hosts, Options) -> Responses
             Hostname = string()
             Hosts = [ tuple() | string() ]
             Options = [ Option ]
-            Option = {id, Id} | {sequence, Sequence} | {timeout, Timeout} | {data, Data}
+            Option = {id, Id} | {sequence, Sequence} | {timeout, Timeout} | {data, Data} |
+                {timestamp, boolean()}
             Id = uint16()
             Sequence = uint16()
             Timeout = int() 
@@ -132,6 +133,12 @@ ping(Socket, Hosts, Options) -> Responses
     being maintained between runs.
 
     Duplicate hosts in the address list are removed.
+
+    A ping payload contains a 12 byte timestamp generated using
+    erlang:now/0. When creating a custom payload, the first 12 bytes of
+    the ICMP echo reply payload will be used for calculating the elapsed
+    time. To disable this behaviour, use the option {timestamp,false}
+    (the elapsed time in the return value will be set to 0).
 
     The timeout defaults to 5 seconds.
 

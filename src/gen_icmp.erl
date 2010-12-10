@@ -57,6 +57,14 @@
         s           % udp socket
 }).
 
+-record(ping_opt, {
+        s,
+        id,
+        sequence,
+        timeout,
+        tref,
+        timestamp = true
+    }).
 
 %%-------------------------------------------------------------------------
 %%% API
@@ -101,9 +109,16 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Seq = proplists:get_value(sequence, Options, 0),
     Data = proplists:get_value(data, Options, payload(echo)),
     Timeout = proplists:get_value(timeout, Options, ?PING_TIMEOUT),
+    Timestamp = proplists:get_value(timestamp, Options, true),
     Addresses = addr_list(Hosts),
     [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || Addr <- Addresses ],
-    Response = ping_reply(Socket, Addresses, Id, Seq, Timeout),
+    Response = ping_reply(Addresses, #ping_opt{
+            s = Socket,
+            id = Id,
+            sequence = Seq,
+            timeout = Timeout,
+            timestamp = Timestamp
+        }),
     ping_timeout(Addresses, Response).
 
 
@@ -361,20 +376,31 @@ ping_timeout(A,B) ->
     B1 = [ X || {_,X,_} <- B ],
     B ++ [ {{error, timeout}, X} || X <- A -- B1 ].
 
-ping_reply(Socket, Hosts, Id, Seq, Timeout) ->
+ping_reply(Hosts, #ping_opt{s = Socket, timeout = Timeout} = Opt) ->
     Pid = self(),
     TRef = erlang:send_after(Timeout, Pid, {icmp, Socket, timeout}),
-    ping_loop(Socket, TRef, Hosts, [], Id, Seq).
+    ping_loop(Hosts, [], Opt#ping_opt{tref = TRef}).
 
-ping_loop(_Socket, TRef, [], Acc, _Id, _Seq) ->
+ping_loop([], Acc, #ping_opt{tref = TRef}) ->
     erlang:cancel_timer(TRef),
     Acc;
-ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
+ping_loop(Hosts, Acc, #ping_opt{
+        s = Socket,
+        id = Id,
+        sequence = Seq,
+        timestamp = Timestamp
+    } = Opt) ->
     receive
         {icmp, Socket, Address,
-            <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Mega:32, Sec:32, USec:32, Data/binary>>} ->
-            T = timer:now_diff(now(), {Mega,Sec,USec}),
-            ping_loop(Socket, TRef, Hosts -- [Address], [{ok, Address, {{Id, Seq, T}, Data}}|Acc], Id, Seq);
+            <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
+            {Elapsed, Payload} = case Timestamp of
+                true ->
+                    <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
+                    {timer:now_diff(now(), {Mega,Sec,USec}), Data1};
+                false ->
+                    {0, Data}
+            end,
+            ping_loop(Hosts -- [Address], [{ok, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
         {icmp, Socket, Saddr,
             <<Type:8, Code:8, _Checksum1:16, _Unused:32,
             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
@@ -385,11 +411,10 @@ ping_loop(Socket, TRef, Hosts, Acc, Id, Seq) ->
             _/binary>> = Data} when Saddr == {SA1,SA2,SA3,SA4} ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
-            ping_loop(Socket, TRef, Hosts -- [DA],
-                [{{error, code({Type, Code})}, DA, {{Id, Seq}, Payload}}|Acc],
-                Id, Seq);
+            ping_loop(Hosts -- [DA], [{{error, code({Type, Code})}, DA, {{Id, Seq}, Payload}}|Acc],
+                Opt);
         {icmp, Socket, timeout} ->
-            ping_loop(Socket, TRef, [], Acc, Id, Seq)
+            ping_loop([], Acc, Opt)
     end.
 
 
