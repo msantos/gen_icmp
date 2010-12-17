@@ -143,7 +143,11 @@ handle_call(close, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
 handle_call({send, IP, Packet}, _From, #state{s = Socket} = State) ->
     {reply, gen_udp:send(Socket, IP, 0, Packet), State};
 handle_call({recv, Length, Timeout}, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
-    {reply, gen_udp:recv(Socket, Length, Timeout), State};
+    Reply = case gen_udp:recv(Socket, Length, Timeout) of
+        {ok, {Address, _Port, Packet}} -> {ok, {Address, Packet}};
+        N -> N
+    end,
+    {reply, Reply, State};
 handle_call({controlling_process, Pid}, {Owner,_}, #state{pid = Owner} = State) ->
     {reply, ok, State#state{pid = Pid}};
 handle_call({setopts, Options}, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
