@@ -144,6 +144,7 @@ send(<<Data:42/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, s
             {id, Id},
             {sequence, Seq},
             {timeout, ?TIMEOUT},
+            {timestamp, false},
             {data, <<(byte_size(Data)):16, Data/bytes>>}
         ]),
     send(Rest, State#state{seq = Seq + 1});
@@ -153,6 +154,7 @@ send(Data, #state{is = Socket, addr = Addr, id = Id, seq = Seq}) ->
             {id, Id},
             {sequence, Seq},
             {timeout, ?TIMEOUT},
+            {timestamp, false},
             {data, <<Len:16, Data/bytes, 0:((42-Len)*8)>>}
         ]),
     Seq+1.
