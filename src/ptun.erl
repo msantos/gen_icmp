@@ -133,9 +133,7 @@ proxy(#state{
             ok = gen_tcp:send(TS, Data1),
             proxy(State#state{ts = TS});
         {icmp, IS, Addr, Packet} ->
-            error_logger:info_report([{dropping, Packet}]),
-            proxy(State);
-        {icmp, IS, _, _} ->
+            error_logger:info_report([{dropping, Packet}, {address, Addr}]),
             proxy(State)
     end.
 
