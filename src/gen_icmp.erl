@@ -130,7 +130,7 @@ start_link(RawOpts, SockOpts) ->
     gen_server:start_link(?MODULE, [Pid, RawOpts, SockOpts], []).
 
 init([Pid, RawOpts, SockOpts]) ->
-    {ok, FD} = procket:listen(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, inet}]),
+    {ok, FD} = procket:open(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, inet}]),
     {ok, Socket} = gen_udp:open(0, SockOpts ++ [binary, {fd, FD}]),
     {ok, #state{
             pid = Pid,
