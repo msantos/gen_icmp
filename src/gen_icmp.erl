@@ -370,10 +370,8 @@ parse_or_resolve(_Addr, {ok, IP}) ->
     IP;
 parse_or_resolve(Addr, {error, einval}) ->
     case inet_res:gethostbyname(Addr) of
-        {ok, #hostent{h_addr_list = IPs}} ->
-            hd(IPs);
-        _ ->
-            throw({badarg, Addr})
+        {ok, #hostent{h_addr_list = [IP|_IPs]}} -> IP;
+        _ -> throw({badarg, Addr})
     end.
 
 ping_timeout(A,B) ->
