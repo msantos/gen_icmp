@@ -20,12 +20,17 @@ open() -> {ok, Socket} | {error, Error}
 open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
 
     Types   Socket = pid()
-            RawOptions = list()
+            RawOptions = [ RawOption | {setuid,boolean()} ]
+            RawOption = options()
             SocketOptions = SocketOpt
             SocketOpt = [ {active, true} | {active, once} |
                 {active, false} ]
 
-    See the procket README for the raw socket options.
+    See the procket README for the raw socket options. If {setuid,false}
+    is set, gen_icmp will not fork the setuid helper program to open the
+    raw socket.  The Erlang VM will require the appropriate privileges to
+    obtain the socket (for example, the CAP_NET_RAW capability on Linux,
+    running as root, etc).
 
     Only the owning process will receive ICMP packets (see
     controlling_process/2 to change the owner). The process owning the
