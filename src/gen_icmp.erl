@@ -31,7 +31,7 @@
 -module(gen_icmp).
 -behaviour(gen_server).
 -include_lib("kernel/include/inet.hrl").
--include("epcap_net.hrl").
+-include("pkt.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -227,13 +227,13 @@ packet(Header, Payload) when is_list(Header), is_binary(Payload) ->
         },
     packet(ICMP, Payload);
 packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
-    Sum = epcap_net:makesum(list_to_binary([
-                epcap_net:icmp(Header),
+    Sum = pkt:makesum(list_to_binary([
+                pkt:icmp(Header),
                 Payload
             ])),
 
     list_to_binary([
-        epcap_net:icmp(Header#icmp{checksum = Sum}),
+        pkt:icmp(Header#icmp{checksum = Sum}),
         Payload
     ]).
 

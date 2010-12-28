@@ -49,7 +49,7 @@
 %% 
 
 -module(ptun).
--include("epcap_net.hrl").
+-include("pkt.hrl").
 
 -export([client/2, server/2]).
 
