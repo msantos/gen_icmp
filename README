@@ -26,11 +26,13 @@ open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
             SocketOpt = [ {active, true} | {active, once} |
                 {active, false} ]
 
-    See the procket README for the raw socket options. If {setuid,false}
-    is set, gen_icmp will not fork the setuid helper program to open the
-    raw socket.  The Erlang VM will require the appropriate privileges to
-    obtain the socket (for example, the CAP_NET_RAW capability on Linux,
-    running as root, etc).
+    See the procket README for the raw socket options. If the
+    {setuid,false} option is used, gen_icmp will not fork the setuid
+    helper program to open the raw socket.  The Erlang VM will require
+    the appropriate privileges to obtain the socket. For example, running
+    as root or on Linux granting the CAP_NET_RAW capability to beam:
+
+        setcap cap_net_raw=ep /usr/local/lib/erlang/erts-5.8.3/bin/beam.smp
 
     Only the owning process will receive ICMP packets (see
     controlling_process/2 to change the owner). The process owning the
@@ -236,6 +238,24 @@ Packet = gen_icmp:packet([{type, 3}, {code, 0}], <<0:160, 0:64>>).
 
 gen_icmp:send(Socket, {127,0,0,1}, Packet).
 
+
+Setting Up an ICMP Ping Tunnel
+
+ptun is an example of using gen_icmp to tunnel TCP over ICMP.
+
+Host1 (1.1.1.1) listens for TCP on port 8787 and forwards the data
+over ICMP:
+
+    erl -noshell -pa ebin deps/*/ebin -eval 'ptun:server({2,2,2,2},8787)'
+
+Host2 (2.2.2.2) receives ICMP echo requests and opens a TCP connection
+to 127.0.0.1:22:
+
+    erl -noshell -pa ebin deps/*/ebin -eval 'ptun:client({1,1,1,1},22)'
+
+To use the proxy on host1:
+
+    ssh -p 8787 127.0.0.1
 
 
 TODO
