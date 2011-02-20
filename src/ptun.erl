@@ -138,7 +138,7 @@ proxy(#state{
     end.
 
 % To keep it simple, we use 64 byte packets
-% 4 bytes header, 2 bytes type, 2 bytes code, 12 bytes timestamp, 2 bytes data length, 42 bytes data
+% 4 bytes header, 2 bytes type, 2 bytes code, 2 bytes data length, 54 bytes data
 send(<<Data:42/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, seq = Seq} = State) ->
     [{ok, Addr, _}] = gen_icmp:ping(Socket, [Addr], [
             {id, Id},
