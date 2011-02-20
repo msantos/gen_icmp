@@ -19,5 +19,5 @@ clean: $(REBAR)
 	@$(REBAR) clean
 
 deps: $(REBAR)
-	@$(REBAR) get-deps
+	@$(REBAR) check-deps || $(REBAR) get-deps
 
