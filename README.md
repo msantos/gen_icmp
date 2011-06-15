@@ -203,7 +203,7 @@ executable needs superuser privileges).
 
 ## EXAMPLE
 
-### Simple ping interface:
+### Simple ping interface
 
     1> gen_icmp:ping("www.yahoo.com").
     [{ok,{67,195,160,76},
@@ -227,7 +227,7 @@ executable needs superuser privileges).
          {{2882,0,29866},
           <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
 
-### Working with ICMP sockets:
+### Working with ICMP sockets
 
     {ok, Socket} = gen_icmp:open().
     
@@ -257,6 +257,6 @@ To use the proxy on host1:
     ssh -p 8787 127.0.0.1
 
 
-TODO
+### TODO
 
 * support for IPv6 ICMP
