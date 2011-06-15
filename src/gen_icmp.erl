@@ -423,5 +423,3 @@ ping_loop(Hosts, Acc, #ping_opt{
         {icmp, Socket, timeout} ->
             ping_loop([], Acc, Opt)
     end.
-
-
