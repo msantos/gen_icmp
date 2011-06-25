@@ -227,6 +227,24 @@ executable needs superuser privileges).
          {{2882,0,29866},
           <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
 
+### Re-using the ICMP ping socket
+
+Keeping the ICMP socket around between runs is more efficient:
+
+    {ok, Socket} = gen_icmp:open(),
+    P1 = gen_icmp:ping(Socket, [{10,1,1,1}, "www.google.com"], []),
+    P2 = gen_icmp:ping(Socket, [{10,2,2,2}, "www.yahoo.com"], []),
+    gen_icmp:close(Socket).
+
+To avoid forking the setuid binary (beam needs the appropriate
+capabilities):
+
+    {ok, Socket} = gen_icmp:open([{setuid,false}], []),
+    P1 = gen_icmp:ping(Socket, [{10,1,1,1}, "www.google.com"], []),
+    P2 = gen_icmp:ping(Socket, [{10,2,2,2}, "www.yahoo.com"], []),
+    gen_icmp:close(Socket).
+
+
 ### Working with ICMP sockets
 
     {ok, Socket} = gen_icmp:open().
