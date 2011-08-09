@@ -130,6 +130,8 @@ start_link(RawOpts, SockOpts) ->
     gen_server:start_link(?MODULE, [Pid, RawOpts, SockOpts], []).
 
 init([Pid, RawOpts, SockOpts]) ->
+    process_flag(trap_exit, true),
+
     {ok, FD} = case proplists:get_value(setuid, RawOpts, true) of
         true ->
             procket:open(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, inet}]);
