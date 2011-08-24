@@ -43,7 +43,8 @@
 -export([
         echo/2, echo/3,
         type/1, code/1,
-        packet/2
+        packet/2,
+        parse/1
     ]).
 
 -export([start_link/2]).
