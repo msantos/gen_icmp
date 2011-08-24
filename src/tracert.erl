@@ -43,7 +43,7 @@
 -define(IP_HDRINCL, 3).
 
 -export([
-        host/0, host/1, host/2,
+        host/1, host/2,
         path/1
     ]).
 -export([
@@ -91,9 +91,6 @@ open(Protocol) ->
     {ok, Socket}.
 
 
-host() ->
-    host({74,125,115,103}, []).
-
 host(Host) ->
     host(Host, []).
 
@@ -112,16 +109,18 @@ host(Host, Options) ->
             rs = RS
         }).
 
+
 path(Path) when is_list(Path) ->
     [ begin
         case N of
-            {TTL, Saddr, Microsec, {icmp, Packet}} ->
+            {Saddr, Microsec, {icmp, Packet}} ->
                 ICMP = icmp_to_proplist(Packet),
-                {TTL, Saddr, Microsec, ICMP};
+                {Saddr, Microsec, ICMP};
             Any ->
                 Any
         end
     end || N <- Path ].
+
 
 %%-------------------------------------------------------------------------
 %%% Probe and watch for the responses
@@ -161,27 +160,27 @@ trace(#state{
         {icmp, Socket, Daddr, Data} ->
             trace(
                 State#state{ttl = 0},
-                [{TTL, Daddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]
+                [{Daddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]
             );
 
         % Response from intermediate host
         {icmp, Socket, Saddr, Data} ->
             trace(
                 State#state{ttl = TTL+1},
-                [{TTL, Saddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]
+                [{Saddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]
             );
 
         % Response from protocol handler
         {tracert, Saddr, Data} ->
             trace(
                 State#state{ttl = 0},
-                [{TTL, Saddr, timer:now_diff(erlang:now(), Now), Data}|Acc]
+                [{Saddr, timer:now_diff(erlang:now(), Now), Data}|Acc]
             )
     after
         Timeout ->
             trace(
                 State#state{ttl = TTL+1},
-                [{TTL, timeout}|Acc]
+                [timeout|Acc]
             )
     end.
 
