@@ -64,7 +64,7 @@
         sport = 0,
         next_port,
 
-        saddr = {192,168,213,54},
+        saddr,
         daddr,
         ws,
         rs
