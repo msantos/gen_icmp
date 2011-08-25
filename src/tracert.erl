@@ -40,8 +40,6 @@
 
 -include("pkt.hrl").
 
--define(IP_HDRINCL, 3).
-
 -export([
         host/1, host/2,
         path/1
@@ -87,7 +85,7 @@ open(Protocol) ->
         {family, inet}
     ]),
 
-    ok = procket:setsockopt(Socket, ?IPPROTO_IP, ?IP_HDRINCL, <<1:32/native>>),
+    ok = procket:setsockopt(Socket, ?IPPROTO_IP, hdrincl(), <<1:32/native>>),
     {ok, Socket}.
 
 
@@ -290,3 +288,11 @@ next_port(udp) ->
     fun(N) -> N+1 end;
 next_port(_) ->
     fun(N) -> N end.
+
+hdrincl() ->
+    case os:type() of
+        {unix, linux} -> 3;
+        {unix, darwin} -> 2;
+        {unix, freebsd} -> 2;
+        {unix, _} -> throw({error, unsupported})
+    end.
