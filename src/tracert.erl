@@ -101,11 +101,16 @@ host(Host, Options) ->
     % Read socket: ICMP trace
     {ok, RS} = gen_icmp:open(),
 
-    trace(State#state{
+    Response = trace(State#state{
             daddr = gen_icmp:parse(Host),
             ws = WS,
             rs = RS
-        }).
+        }),
+
+    gen_icmp:close(RS),
+    ok = procket:close(WS),
+
+    Response.
 
 
 path(Path) when is_list(Path) ->
