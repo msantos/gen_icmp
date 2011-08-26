@@ -73,19 +73,19 @@
 %%% API
 %%-------------------------------------------------------------------------
 
-open(Protocol) ->
-    P = case Protocol of
-        icmp -> icmp;
-        _ -> raw
+open(Protocol0) ->
+    {Protocol, Type} = case Protocol0 of
+        icmp -> {icmp, raw};
+        udp -> {udp, dgram};
+        _ -> {raw, raw}
     end,
 
     {ok, Socket} = procket:open(0, [
-        {protocol, P},
-        {type, raw},
-        {family, inet}
+        {family, inet},
+        {type, Type},
+        {protocol, Protocol}
     ]),
 
-    ok = procket:setsockopt(Socket, ?IPPROTO_IP, hdrincl(), <<1:32/native>>),
     {ok, Socket}.
 
 
@@ -196,11 +196,12 @@ probe(#state{
         ttl = TTL
     }) ->
     Sockaddr = <<
-        ?PF_INET:16/native,         % Address family
+        (procket:sockaddr_common(?PF_INET, 16))/binary,
         Dport:16,                   % Destination Port
         DA1,DA2,DA3,DA4,            % IPv4 address
         0:64
     >>,
+    ok = procket:setsockopt(Socket, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>),
     Packet = Fun({{SA1,SA2,SA3,SA4}, Sport}, {{DA1,DA2,DA3,DA4}, Dport}, TTL),
     procket:sendto(Socket, Packet, 0, Sockaddr).
  
@@ -252,29 +253,13 @@ icmp_to_proplist(ICMP) when is_binary(ICMP) ->
 
 % Default UDP packet
 protocol(udp) ->
-    fun({Saddr, _Sport}, {Daddr, Dport}, TTL) ->
-        list_to_binary([
-            pkt:ipv4(#ipv4{
-                saddr = Saddr,
-                daddr = Daddr,
-                p = ?IPPROTO_UDP,
-                ttl = TTL
-            }),
-            pkt:udp(#udp{dport = Dport})
-        ])
+    fun({_Saddr, _Sport}, {_Daddr, _Dport}, _TTL) ->
+        <<>>
     end;
 % Default ICMP echo packet
 protocol(icmp) ->
-    fun({Saddr, _Sport}, {Daddr, _Dport}, TTL) ->
-        list_to_binary([
-            pkt:ipv4(#ipv4{
-                saddr = Saddr,
-                daddr = Daddr,
-                p = ?IPPROTO_ICMP,
-                ttl = TTL
-            }),
-            gen_icmp:packet([], <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
-        ])
+    fun({_Saddr, _Sport}, {_Daddr, _Dport}, _TTL) ->
+        gen_icmp:packet([], <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
     end.
 
 
@@ -289,10 +274,8 @@ next_port(udp) ->
 next_port(_) ->
     fun(N) -> N end.
 
-hdrincl() ->
+ip_ttl() ->
     case os:type() of
-        {unix, linux} -> 3;
-        {unix, darwin} -> 2;
-        {unix, freebsd} -> 2;
-        {unix, _} -> throw({error, unsupported})
+        {unix, linux} -> 2;
+        {unix, _} -> 4
     end.
