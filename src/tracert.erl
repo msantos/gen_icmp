@@ -123,7 +123,7 @@ path(Path) when is_list(Path) ->
     [ begin
         case N of
             {Saddr, Microsec, {icmp, Packet}} ->
-                ICMP = icmp_to_proplist(Packet),
+                ICMP = icmp_to_atom(Packet),
                 {Saddr, Microsec, ICMP};
             Any ->
                 Any
@@ -252,10 +252,10 @@ proplist_to_record(Options) ->
     }.
 
 
-icmp_to_proplist(ICMP) when is_binary(ICMP) ->
+icmp_to_atom(ICMP) when is_binary(ICMP) ->
     {#icmp{type = Type,
         code = Code}, _Payload} = pkt:icmp(ICMP),
-    {icmp, gen_icmp:code({Type,  Code})}.
+    gen_icmp:code({Type,  Code}).
 
 
 %%
