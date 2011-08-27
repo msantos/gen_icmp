@@ -95,17 +95,23 @@ host(Host) ->
 host(Host, Options) ->
     State = proplist_to_record(Options),
 
-    % Write socket: probes
-    {ok, WS} = open(State#state.protocol),
-
     % Read socket: ICMP trace
     {ok, RS} = gen_icmp:open(),
 
-    Response = trace(State#state{
+    % Write socket: probes
+    {ok, WS} = open(State#state.protocol),
+
+    Response = try trace(State#state{
             daddr = gen_icmp:parse(Host),
             ws = WS,
             rs = RS
-        }),
+        }) of
+        Path ->
+            Path
+    catch
+        _:Error ->
+            {error, Error}
+    end,
 
     gen_icmp:close(RS),
     ok = procket:close(WS),
