@@ -47,7 +47,8 @@
 -export([
         open/1,
         proplist_to_record/1,
-        probe/1
+        probe/1,
+        response/1
     ]).
 
 -record(state, {
@@ -120,15 +121,21 @@ host(Host, Options) ->
 
 
 path(Path) when is_list(Path) ->
-    [ begin
-        case N of
-            {Saddr, Microsec, {icmp, Packet}} ->
-                ICMP = icmp_to_atom(Packet),
-                {Saddr, Microsec, ICMP};
-            Any ->
-                Any
-        end
-    end || N <- Path ].
+    path(Path, [response(icmp)]).
+
+path(Path, []) ->
+    Path;
+path(Path, [Fun|Funs]) when is_list(Path), is_function(Fun) ->
+    Mapped = lists:map(Fun, Path),
+    path(Mapped, Funs).
+
+response(icmp) ->
+    fun({Saddr, Microsec, {icmp, Packet}}) ->
+            ICMP = icmp_to_atom(Packet),
+            {Saddr, Microsec, ICMP};
+        (N) ->
+            N
+    end.
 
 
 %%-------------------------------------------------------------------------
