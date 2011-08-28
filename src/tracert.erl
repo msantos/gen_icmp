@@ -101,6 +101,7 @@ host(Ref, Host, Options) ->
 
 
 trace(Ref, State) ->
+    flush_events(Ref),
     trace(Ref, State, []).
 
 % Traceroute complete
@@ -351,4 +352,13 @@ ip_ttl() ->
     case os:type() of
         {unix, linux} -> 2;
         {unix, _} -> 4
+    end.
+
+
+flush_events(Ref) ->
+    receive
+        {Event, Ref, _Addr, _Data} when Event == icmp; Event == tracert ->
+            flush_events(Ref)
+    after
+            0 -> ok
     end.
