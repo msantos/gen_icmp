@@ -56,6 +56,7 @@
         ttl = 1,
         max_hops = 31,
         timeout = 1000,         % 1 second
+        setuid = true,
 
         packet,
         handler,
@@ -74,20 +75,25 @@
 %%% API
 %%-------------------------------------------------------------------------
 
-open(Protocol0) ->
+open(Protocol) ->
+    open(Protocol, true).
+
+open(Protocol0, Setuid) ->
     {Protocol, Type} = case Protocol0 of
         icmp -> {icmp, raw};
         udp -> {udp, dgram};
         _ -> {raw, raw}
     end,
+    open_1(inet, Type, Protocol, Setuid).
 
-    {ok, Socket} = procket:open(0, [
-        {family, inet},
+open_1(Family, Type, Protocol, true) ->
+    procket:open(0, [
+        {family, Family},
         {type, Type},
         {protocol, Protocol}
-    ]),
-
-    {ok, Socket}.
+    ]);
+open_1(Family, Type, Protocol, false) ->
+    procket:socket(Family, Type, Protocol).
 
 
 host(Host) ->
@@ -100,7 +106,7 @@ host(Host, Options) ->
     {ok, RS} = gen_icmp:open(),
 
     % Write socket: probes
-    {ok, WS} = open(State#state.protocol),
+    {ok, WS} = open(State#state.protocol, State#state.setuid),
 
     Response = try trace(State#state{
             daddr = gen_icmp:parse(Host),
@@ -238,6 +244,7 @@ proplist_to_record(Options) ->
     Initial_ttl = proplists:get_value(ttl, Options, Default#state.ttl),
     Max_hops = proplists:get_value(max_hops, Options, Default#state.max_hops),
     Timeout = proplists:get_value(timeout, Options, Default#state.timeout),
+    Setuid = proplists:get_value(setuid, Options, Default#state.setuid),
 
     Saddr = proplists:get_value(saddr, Options, Default#state.saddr),
     Sport = proplists:get_value(sport, Options, crypto:rand_uniform(1,16#FFFF)),
@@ -252,6 +259,7 @@ proplist_to_record(Options) ->
         ttl = Initial_ttl,
         max_hops = Max_hops,
         timeout = Timeout,
+        setuid = Setuid,
         saddr = Saddr,
         sport = Sport,
 
