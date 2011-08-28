@@ -35,23 +35,33 @@
 %%% Send a probe packet with the time to live set from 1. Monitor
 %%% an ICMP socket for ICMP responses or timeout.
 %%% 
-
 -module(tracert).
+-behaviour(gen_server).
 
 -include("pkt.hrl").
 
 -export([
-        host/1, host/2,
+        host/1, host/2, host/3,
         path/1
     ]).
 -export([
-        open/1,
+        open/0, open/1,
+        close/1,
+        socket/1, socket/2,
         proplist_to_record/1,
-        probe/1,
+        probe/5,
         response/1
     ]).
 
+-export([start_link/1]).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+        terminate/2, code_change/3]).
+
+
 -record(state, {
+        pid,
+
         protocol = icmp,
         ttl = 1,
         max_hops = 31,
@@ -74,56 +84,85 @@
 %%-------------------------------------------------------------------------
 %%% API
 %%-------------------------------------------------------------------------
-
-open(Protocol) ->
-    open(Protocol, true).
-
-open(Protocol0, Setuid) ->
-    {Protocol, Type} = case Protocol0 of
-        icmp -> {icmp, raw};
-        udp -> {udp, dgram};
-        _ -> {raw, raw}
-    end,
-    open_1(inet, Type, Protocol, Setuid).
-
-open_1(Family, Type, Protocol, true) ->
-    procket:open(0, [
-        {family, Family},
-        {type, Type},
-        {protocol, Protocol}
-    ]);
-open_1(Family, Type, Protocol, false) ->
-    procket:socket(Family, Type, Protocol).
-
-
 host(Host) ->
     host(Host, []).
 
 host(Host, Options) ->
+    {ok, Socket} = open(Options),
+    Path = host(Socket, Host, Options),
+    close(Socket),
+    Path.
+
+host(Ref, Host, Options) ->
+    Daddr = gen_icmp:parse(Host),
     State = proplist_to_record(Options),
+    ok = gen_server:call(Ref, {handler, State#state.handler}, infinity),
+    trace(Ref, State#state{daddr = Daddr}).
 
-    % Read socket: ICMP trace
-    {ok, RS} = gen_icmp:open(),
 
-    % Write socket: probes
-    {ok, WS} = open(State#state.protocol, State#state.setuid),
+trace(Ref, State) ->
+    trace(Ref, State, []).
 
-    Response = try trace(State#state{
-            daddr = gen_icmp:parse(Host),
-            ws = WS,
-            rs = RS
-        }) of
-        Path ->
-            Path
-    catch
-        _:Error ->
-            {error, Error}
-    end,
+% Traceroute complete
+trace(_Ref, #state{ttl = 0}, Acc) ->
+    lists:reverse(Acc);
+% Max hops reached
+trace(_Ref, #state{ttl = TTL, max_hops = TTL}, Acc) ->
+    lists:reverse(Acc);
+trace(Ref,
+    #state{
+        daddr = Daddr,
+        dport = Dport,
 
-    gen_icmp:close(RS),
-    ok = procket:close(WS),
+        saddr = Saddr,
+        sport = Sport,
 
-    Response.
+        ttl = TTL,
+        packet = Fun,
+        next_port = Next,
+
+        timeout = Timeout
+    } = State0, Acc) ->
+
+    State = State0#state{dport = Next(Dport)},
+    Packet = Fun({Saddr, Sport}, {Daddr, Dport}, TTL),
+    ok = probe(Ref, Daddr, Dport, TTL, Packet),
+
+    Now = erlang:now(),
+
+    receive
+        % Response from destination
+        {icmp, Ref, Daddr, Data} ->
+            trace(Ref, State#state{ttl = 0},
+                [{Daddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]);
+
+        % Response from intermediate host
+        {icmp, Ref, Addr, Data} ->
+            trace(Ref, State#state{ttl = TTL+1},
+                [{Addr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]);
+
+        % Response from protocol handler
+        {tracert, Ref, Saddr, Data} ->
+            trace(Ref, State#state{ttl = 0},
+                [{Saddr, timer:now_diff(erlang:now(), Now), Data}|Acc])
+    after
+        Timeout ->
+            trace(Ref, State#state{ttl = TTL+1}, [timeout|Acc])
+    end.
+
+
+probe(Ref, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
+    gen_server:call(Ref, {send, Daddr, Dport, TTL, Packet}, infinity).
+
+
+open() ->
+    open([]).
+open(Options) ->
+    start_link(Options).
+
+
+close(Ref) ->
+    gen_server:call(Ref, close).
 
 
 path(Path) when is_list(Path) ->
@@ -135,6 +174,7 @@ path(Path, [Fun|Funs]) when is_list(Path), is_function(Fun) ->
     Mapped = lists:map(Fun, Path),
     path(Mapped, Funs).
 
+
 response(icmp) ->
     fun({Saddr, Microsec, {icmp, Packet}}) ->
             ICMP = icmp_to_atom(Packet),
@@ -145,81 +185,32 @@ response(icmp) ->
 
 
 %%-------------------------------------------------------------------------
-%%% Probe and watch for the responses
+%%% Callbacks
 %%-------------------------------------------------------------------------
-
-%%
-%% Send out probes and wait for the response
-%%
-trace(#state{handler = Handler} = State) when is_function(Handler) ->
+start_link(Options) ->
     Pid = self(),
-    spawn_link(Handler(Pid)),
-    trace(State, []);
-trace(State) ->
-    trace(State, []).
+    gen_server:start_link(?MODULE, [Pid, Options], []).
 
-% Traceroute complete
-trace(#state{ttl = 0}, Acc) ->
-    lists:reverse(Acc);
-% Max hops reached
-trace(#state{ttl = TTL, max_hops = TTL}, Acc) ->
-    lists:reverse(Acc);
-trace(#state{
-        daddr = Daddr,
-        rs = Socket,
-        ttl = TTL,
-        dport = Port,
-        next_port = Next,
-        timeout = Timeout
-    } = State0, Acc) ->
+init([Pid, Options]) ->
+    process_flag(trap_exit, true),
 
-    State = State0#state{dport = Next(Port)},
-    ok = probe(State),
+    State = proplist_to_record(Options),
 
-    Now = erlang:now(),
+    % Read socket: ICMP trace
+    {ok, RS} = gen_icmp:open(),
 
-    receive
-        % Response from destination
-        {icmp, Socket, Daddr, Data} ->
-            trace(
-                State#state{ttl = 0},
-                [{Daddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]
-            );
+    % Write socket: probes
+    {ok, WS} = socket(State#state.protocol, State#state.setuid),
 
-        % Response from intermediate host
-        {icmp, Socket, Saddr, Data} ->
-            trace(
-                State#state{ttl = TTL+1},
-                [{Saddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]
-            );
+    {ok, State#state{
+            pid = Pid,
+            ws = WS,
+            rs = RS
+        }}.
 
-        % Response from protocol handler
-        {tracert, Saddr, Data} ->
-            trace(
-                State#state{ttl = 0},
-                [{Saddr, timer:now_diff(erlang:now(), Now), Data}|Acc]
-            )
-    after
-        Timeout ->
-            trace(
-                State#state{ttl = TTL+1},
-                [timeout|Acc]
-            )
-    end.
-
-
-%%
-%% Generates a probe packet
-%%
-probe(#state{
-        packet = Fun,
-        ws = Socket,
-        saddr = {SA1,SA2,SA3,SA4},
-        sport = Sport,
-        daddr = {DA1,DA2,DA3,DA4},
-        dport = Dport,
-        ttl = TTL
-    }) ->
+handle_call(close, {Pid,_}, #state{pid = Pid} = State) ->
+    {stop, normal, ok, State};
+handle_call({send, {DA1,DA2,DA3,DA4}, Dport, TTL, Packet}, _From, #state{ws = Socket} = State) ->
     Sockaddr = <<
         (procket:sockaddr_common(?PF_INET, 16))/binary,
         Dport:16,                   % Destination Port
@@ -227,13 +218,62 @@ probe(#state{
         0:64
     >>,
     ok = procket:setsockopt(Socket, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>),
-    Packet = Fun({{SA1,SA2,SA3,SA4}, Sport}, {{DA1,DA2,DA3,DA4}, Dport}, TTL),
-    procket:sendto(Socket, Packet, 0, Sockaddr).
- 
+    {reply, procket:sendto(Socket, Packet, 0, Sockaddr), State};
+handle_call({handler, _Handler}, From, State) ->
+    {reply, ok, State};
+
+handle_call(Request, From, State) ->
+    error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
+    {reply, ok, State}.
+
+handle_cast(Msg, State) ->
+    error_logger:info_report([{cast, Msg}, {state, State}]),
+    {noreply, State}.
+
+handle_info({icmp, Socket, Daddr, Data}, #state{pid = Pid, rs = Socket} = State) ->
+    Pid ! {icmp, self(), Daddr, Data},
+    {noreply, State};
+handle_info({tracert, Daddr, Data}, #state{pid = Pid} = State) ->
+    Pid ! {tracert, self(), Daddr, Data},
+    {noreply, State};
+
+handle_info(Info, State) ->
+    error_logger:info_report([{info, Info}, {state, State}]),
+    {noreply, State}.
+
+terminate(_Reason, #state{rs = RS, ws = WS}) ->
+    procket:close(WS),
+    gen_icmp:close(RS),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
 
 %%-------------------------------------------------------------------------
-%%% Internal Functions
+%%% Utility Functions
 %%-------------------------------------------------------------------------
+socket(Protocol) ->
+    socket(Protocol, true).
+
+socket(Protocol0, Setuid) ->
+    {Protocol, Type} = case Protocol0 of
+        icmp -> {icmp, raw};
+        udp -> {udp, dgram};
+        _ -> {raw, raw}
+    end,
+    socket_1(inet, Type, Protocol, Setuid).
+
+socket_1(Family, Type, Protocol, true) ->
+    procket:open(0, [
+        {family, Family},
+        {type, Type},
+        {protocol, Protocol}
+    ]);
+socket_1(Family, Type, Protocol, false) ->
+    procket:socket(Family, Type, Protocol).
+
+
 proplist_to_record(Options) ->
     Default = #state{},
 
@@ -268,6 +308,9 @@ proplist_to_record(Options) ->
     }.
 
 
+%%-------------------------------------------------------------------------
+%%% Internal Functions
+%%-------------------------------------------------------------------------
 icmp_to_atom(ICMP) when is_binary(ICMP) ->
     {#icmp{type = Type,
         code = Code}, _Payload} = pkt:icmp(ICMP),
