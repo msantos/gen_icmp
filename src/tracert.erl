@@ -219,7 +219,7 @@ handle_call({send, {DA1,DA2,DA3,DA4}, Dport, TTL, Packet}, _From, #state{ws = So
     >>,
     ok = procket:setsockopt(Socket, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>),
     {reply, procket:sendto(Socket, Packet, 0, Sockaddr), State};
-handle_call({handler, _Handler}, From, State) ->
+handle_call({handler, _Handler}, _From, State) ->
     {reply, ok, State};
 
 handle_call(Request, From, State) ->
@@ -291,6 +291,9 @@ proplist_to_record(Options) ->
     Dport = proplists:get_value(dport, Options, dport(Protocol)),
 
     Next_port = proplists:get_value(next_port, Options, next_port(Protocol)),
+
+    true = Initial_ttl < Max_hops,
+    true = Initial_ttl > 0,
 
     #state{
         protocol = Protocol,
