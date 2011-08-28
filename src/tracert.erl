@@ -146,7 +146,8 @@ response(icmp) ->
 %% Send out probes and wait for the response
 %%
 trace(#state{handler = Handler} = State) when is_function(Handler) ->
-    spawn_link(Handler),
+    Pid = self(),
+    spawn_link(Handler(Pid)),
     trace(State, []);
 trace(State) ->
     trace(State, []).
