@@ -103,7 +103,9 @@ host(Ref, Host, Options) ->
 trace(Ref, State) ->
     flush_events(Ref),
     Sport = gen_server:call(Ref, sport),
-    trace(Ref, State#state{sport = Sport}, []).
+    Path = trace(Ref, State#state{sport = Sport}, []),
+    flush_events(Ref),
+    Path.
 
 % Traceroute complete
 trace(_Ref, #state{ttl = 0}, Acc) ->
