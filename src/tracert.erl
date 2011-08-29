@@ -47,7 +47,7 @@
 -export([
         open/0, open/1,
         close/1,
-        socket/1, socket/2,
+        socket/3, socket/4,
         proplist_to_record/1,
         probe/5,
         response/1
@@ -102,7 +102,8 @@ host(Ref, Host, Options) ->
 
 trace(Ref, State) ->
     flush_events(Ref),
-    trace(Ref, State, []).
+    Sport = gen_server:call(Ref, sport),
+    trace(Ref, State#state{sport = Sport}, []).
 
 % Traceroute complete
 trace(_Ref, #state{ttl = 0}, Acc) ->
@@ -133,12 +134,20 @@ trace(Ref,
 
     receive
         % Response from destination
-        {icmp, Ref, Daddr, Data} ->
+        {icmp, Ref, Daddr, {_, Data}} ->
             trace(Ref, State#state{ttl = 0},
                 [{Daddr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]);
 
         % Response from intermediate host
-        {icmp, Ref, Addr, Data} ->
+        % ICMP payload
+        {icmp, Ref, Addr, {icmp, <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes,
+                _Type:8, _Code:8, _Checksum:16, Sport:16, _/binary>> = Data}} ->
+            trace(Ref, State#state{ttl = TTL+1},
+                [{Addr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]);
+
+        % UDP payload
+        {icmp, Ref, Addr, {udp, << _ICMPHeader:8/bytes, _IPv4Header:20/bytes,
+                Sport:16, _/binary>> = Data}} ->
             trace(Ref, State#state{ttl = TTL+1},
                 [{Addr, timer:now_diff(erlang:now(), Now), {icmp, Data}}|Acc]);
 
@@ -196,12 +205,24 @@ init([Pid, Options]) ->
     process_flag(trap_exit, true),
 
     State = proplist_to_record(Options),
+    #state{
+        protocol = Protocol,
+        saddr = Saddr,
+        sport = Sport,
+        setuid = Setuid
+    } = State,
+
 
     % Read socket: ICMP trace
     {ok, RS} = gen_icmp:open(),
 
     % Write socket: probes
-    {ok, WS} = socket(State#state.protocol, State#state.setuid),
+    {ok, WS} = socket(
+        Protocol,
+        Saddr,
+        Sport,
+        Setuid
+    ),
 
     {ok, State#state{
             pid = Pid,
@@ -211,6 +232,8 @@ init([Pid, Options]) ->
 
 handle_call(close, {Pid,_}, #state{pid = Pid} = State) ->
     {stop, normal, ok, State};
+handle_call(sport, _From, #state{sport = Sport} = State) ->
+    {reply, Sport, State};
 handle_call({send, {DA1,DA2,DA3,DA4}, Dport, TTL, Packet}, _From, #state{ws = Socket} = State) ->
     Sockaddr = <<
         (procket:sockaddr_common(?PF_INET, 16))/binary,
@@ -231,8 +254,9 @@ handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
-handle_info({icmp, Socket, Daddr, Data}, #state{pid = Pid, rs = Socket} = State) ->
-    Pid ! {icmp, self(), Daddr, Data},
+handle_info({icmp, Socket, Daddr, Data}, #state{pid = Pid, rs = Socket,
+        protocol = Protocol} = State) ->
+    Pid ! {icmp, self(), Daddr, {Protocol, Data}},
     {noreply, State};
 handle_info({tracert, Daddr, Data}, #state{pid = Pid} = State) ->
     Pid ! {tracert, self(), Daddr, Data},
@@ -254,26 +278,40 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------------
 %%% Utility Functions
 %%-------------------------------------------------------------------------
-socket(Protocol) ->
-    socket(Protocol, true).
+socket(Protocol, Saddr, Sport) ->
+    socket(Protocol, Saddr, Sport, true).
 
-socket(Protocol0, Setuid) ->
-    {Protocol, Type} = case Protocol0 of
-        icmp -> {icmp, raw};
-        udp -> {udp, dgram};
-        _ -> {raw, raw}
+socket(Protocol0, Saddr, Sport, Setuid) ->
+    {Protocol, Type, Port} = case Protocol0 of
+        icmp -> {icmp, raw, 0};
+        udp -> {udp, dgram, Sport};
+        _ -> {raw, raw, 0}
     end,
-    socket_1(inet, Type, Protocol, Setuid).
+    socket_1(inet, Type, Protocol, Saddr, Port, Setuid).
 
-socket_1(Family, Type, Protocol, true) ->
-    procket:open(0, [
+socket_1(Family, Type, Protocol, Saddr, Sport, true) ->
+    procket:open(Sport, [
+        {ip, Saddr},
         {family, Family},
         {type, Type},
         {protocol, Protocol}
     ]);
-socket_1(Family, Type, Protocol, false) ->
-    procket:socket(Family, Type, Protocol).
-
+socket_1(Family, Type, Protocol, _Saddr, 0, false) ->
+    procket:socket(Family, Type, Protocol);
+socket_1(Family, Type, Protocol, {SA1,SA2,SA3,SA4}, Sport, false) ->
+    case procket:socket(Family, Type, Protocol) of
+        {ok, Socket} ->
+            Sockaddr = <<
+                (procket:sockaddr_common(?PF_INET, 16))/binary,
+                Sport:16,           % Source port
+                SA1,SA2,SA3,SA4,    % IPv4 address
+                0:64
+            >>,
+            ok = procket:bind(Socket, Sockaddr),
+            {ok, Socket};
+        Error ->
+            Error
+    end.
 
 proplist_to_record(Options) ->
     Default = #state{},
@@ -288,7 +326,7 @@ proplist_to_record(Options) ->
     Setuid = proplists:get_value(setuid, Options, Default#state.setuid),
 
     Saddr = proplists:get_value(saddr, Options, Default#state.saddr),
-    Sport = proplists:get_value(sport, Options, crypto:rand_uniform(1,16#FFFF)),
+    Sport = proplists:get_value(sport, Options, crypto:rand_uniform(1 bsl 15, 16#FFFF)),
     Dport = proplists:get_value(dport, Options, dport(Protocol)),
 
     Next_port = proplists:get_value(next_port, Options, next_port(Protocol)),
@@ -332,8 +370,8 @@ protocol(udp) ->
     end;
 % Default ICMP echo packet
 protocol(icmp) ->
-    fun({_Saddr, _Sport}, {_Daddr, _Dport}, _TTL) ->
-        gen_icmp:packet([], <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
+    fun({_Saddr, Sport}, {_Daddr, _Dport}, _TTL) ->
+        gen_icmp:echo(Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
     end.
 
 
