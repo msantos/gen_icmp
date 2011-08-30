@@ -328,7 +328,7 @@ proplist_to_record(Options) ->
     Setuid = proplists:get_value(setuid, Options, Default#state.setuid),
 
     Saddr = proplists:get_value(saddr, Options, Default#state.saddr),
-    Sport = proplists:get_value(sport, Options, crypto:rand_uniform(1 bsl 15, 16#FFFF)),
+    Sport = proplists:get_value(sport, Options, crypto:rand_uniform(16#8000, 16#FFFF)),
     Dport = proplists:get_value(dport, Options, dport(Protocol)),
 
     Next_port = proplists:get_value(next_port, Options, next_port(Protocol)),

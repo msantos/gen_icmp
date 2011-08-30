@@ -192,6 +192,71 @@ version. If you just need a simple example of sending a ping, also see:
         function will calculate the ICMP checksum and insert it into the
         packet.
 
+### Traceroute
+
+tracert is an Erlang traceroute implementation built using gen_icmp.
+
+    host(Host) -> Path
+    host(Host, Options) -> Path
+    host(Socket, Host, Options) -> Path
+
+        Types   Socket = pid()
+                Host = Address | Hostname
+                Address = tuple()
+                Hostname = string()
+                Options = [ Option ]
+                Option = {protocol, Protocol}
+                    | {max_hops, uint()}
+                    | {timeout, uint()}
+                    | {setuid, bool()}
+                    | {saddr, Address}
+                    | {sport, uint16()}
+                Protocol = icmp | udp
+                Path = [ {Address, MicroSeconds, {Protocol, binary()}
+                    | timeout ]
+
+        Perform a traceroute to a destination. ICMP and UDP probes are
+        supported. ICMP probes are the default.
+
+        max_hops is the maximum TTL (default: 30)
+
+        Set the time in milliseconds to wait for a response using the
+        timeout option (default: 1000 ms).  WARNING: if the response
+        arrives after the timeout, tracert will insert spurious entries
+        into the path.
+
+        tracert will not spawn the setuid helper if the {setuid, false}
+        option is used. In this case, beam must either be running as
+        root or have the cap_net_raw privileges under Linux.
+
+        The {sport, Port} option sets the initial source port for UDP
+        probes. The port will be incremented by 1 for each subsequent
+        probe (default: random high port).  For ICMP probes, the ICMP
+        ID field will be set to this value.
+
+        The return value is an ordered list of tuples:
+
+            Adddress: the source address responding to the probe
+
+            MicroSeconds: time elapsed between the probe and receiving
+            the response
+
+            Protocol: icmp or udp
+
+            Protocol data: a binary representing the received packet
+            contents
+
+    path(Path) -> Reasons
+
+        Types   Path = [ {Address, MicroSeconds, {Protocol, binary()} ]
+                Reasons = [ {Address, MicroSeconds, Reason} ]
+                Reason = ICMP | UDP | timeout
+                ICMP = timxceed_intrans | echo_reply | ...
+                UDP = unreach_port | ...
+
+        Convert the list of binaries returned by host/1,2,3 to atoms
+        representing the ICMP reponse codes and UDP errors.
+
 
 ## COMPILING
 
@@ -273,6 +338,24 @@ to 127.0.0.1:22:
 To use the proxy on host1:
 
     ssh -p 8787 127.0.0.1
+
+### Traceroute
+
+    1> Path = tracert:host({8,8,8,8}).
+    [{{216,239,46,191},
+     36149,
+     {icmp,<<11,0,111,150,0,0,0,0,69,128,0,84,0,0,64,...>>}},
+     {{216,239,47,189},
+     51459,
+     {icmp,<<11,0,111,150,0,0,0,0,69,128,0,84,0,0,...>>}},
+     {{8,8,8,8},
+     34946,
+     {icmp,<<0,0,170,0,219,104,0,0,32,33,34,35,36,...>>}}]
+
+    2> tracert:path(Path).
+    [{{216,239,46,191},62815,timxceed_intrans},
+     {{216,239,47,189},44244,timxceed_intrans},
+     {{8,8,8,8},34825,echoreply}]
 
 
 ### TODO
