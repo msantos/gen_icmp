@@ -113,14 +113,16 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Timestamp = proplists:get_value(timestamp, Options, true),
     Addresses = addr_list(Hosts),
     [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || Addr <- Addresses ],
-    Response = ping_reply(Addresses, #ping_opt{
+    Reply = ping_reply(Addresses, #ping_opt{
             s = Socket,
             id = Id,
             sequence = Seq,
             timeout = Timeout,
             timestamp = Timestamp
         }),
-    ping_timeout(Addresses, Response).
+    Reply1 = ping_timeout(Addresses, Reply),
+    flush_events(Socket),
+    Reply1.
 
 
 %%-------------------------------------------------------------------------
@@ -425,4 +427,13 @@ ping_loop(Hosts, Acc, #ping_opt{
                 Opt);
         {icmp, Socket, timeout} ->
             ping_loop([], Acc, Opt)
+    end.
+
+
+flush_events(Ref) ->
+    receive
+        {icmp, Ref, _Addr, _Data} ->
+            flush_events(Ref)
+    after
+        0 -> ok
     end.
