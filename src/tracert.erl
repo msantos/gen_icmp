@@ -38,7 +38,7 @@
 -module(tracert).
 -behaviour(gen_server).
 
--include("pkt.hrl").
+-include_lib("pkt/include/pkt.hrl").
 
 -export([
         host/1, host/2, host/3,

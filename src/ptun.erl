@@ -49,7 +49,7 @@
 %% 
 
 -module(ptun).
--include("pkt.hrl").
+-include_lib("pkt/include/pkt.hrl").
 
 -export([client/2, server/2]).
 
