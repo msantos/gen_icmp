@@ -31,7 +31,7 @@
 -module(gen_icmp).
 -behaviour(gen_server).
 -include_lib("kernel/include/inet.hrl").
--include("pkt.hrl").
+-include_lib("pkt/include/pkt.hrl").
 
 -define(SERVER, ?MODULE).
 
