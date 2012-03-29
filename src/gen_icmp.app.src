@@ -1,5 +1,5 @@
 {application, gen_icmp,
     [
     {description, "Generate ICMP packets"},
-    {vsn, "0.01"}
+    {vsn, "0.02"}
     ]}.

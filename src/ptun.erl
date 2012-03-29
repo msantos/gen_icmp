@@ -1,4 +1,4 @@
-%% Copyright (c) 2010-2011, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2010-2012, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -158,5 +158,3 @@ send(Data, #state{is = Socket, addr = Addr, id = Id, seq = Seq}) ->
             {data, <<Len:16, Data/bytes, 0:((42-Len)*8)>>}
         ]),
     Seq+1.
-
-
