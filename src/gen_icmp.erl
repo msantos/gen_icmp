@@ -171,12 +171,12 @@ handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
-handle_info({udp, Socket, Saddr, 0,
+handle_info({udp, Socket, {SA1,SA2,SA3,SA4} = Saddr, 0,
         <<4:4, HL:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
           _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
           SA1:8, SA2:8, SA3:8, SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
-          Data/binary>>}, #state{pid = Pid, s = Socket} = State) when Saddr == {SA1,SA2,SA3,SA4} ->
+          Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
     Opt = case (HL-5)*4 of
         N when N > 0 -> N;
         _ -> 0
@@ -413,14 +413,14 @@ ping_loop(Hosts, Acc, #ping_opt{
                     {0, Data}
             end,
             ping_loop(Hosts -- [Address], [{ok, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
-        {icmp, Socket, Saddr,
+        {icmp, Socket, {SA1,SA2,SA3,SA4},
             <<Type:8, Code:8, _Checksum1:16, _Unused:32,
             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
             _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
             SA1:8, SA2:8, SA3:8, SA4:8,
             DA1:8, DA2:8, DA3:8, DA4:8,
             ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq:16,
-            _/binary>> = Data} when Saddr == {SA1,SA2,SA3,SA4} ->
+            _/binary>> = Data} ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
             ping_loop(Hosts -- [DA], [{{error, code({Type, Code})}, DA, {{Id, Seq}, Payload}}|Acc],
