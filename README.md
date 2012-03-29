@@ -325,6 +325,10 @@ capabilities):
 
 ptun is an example of using gen\_icmp to tunnel TCP over ICMP.
 
+To compile ptun:
+
+    erlc -I deps -o ebin examples/ptun.erl
+
 Host1 (1.1.1.1) listens for TCP on port 8787 and forwards the data
 over ICMP:
 
