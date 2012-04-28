@@ -110,8 +110,8 @@ version. If you just need a simple example of sending a ping, also see:
                 Timeout = int() 
                 Data = binary()
                 Responses = [ Response ]
-                Response = {ok, Address, {Id, Sequence, Elapsed, Payload}} |
-                    {{error, Error}, Address, {Id, Sequence, Payload}} | {{error, timeout}, Address}
+                Response = {ok, Host, Address, {Id, Sequence, Elapsed, Payload}} |
+                    {{error, Error}, Host, Address, {Id, Sequence, Payload}} | {{error, timeout}, Address}
                 Elapsed = int()
                 Payload = binary()
                 Error = unreach_host | timxceed_intrans
@@ -137,8 +137,13 @@ version. If you just need a simple example of sending a ping, also see:
         best performance, ping/3 should be used instead, with the socket
         being maintained between runs.
     
-        Duplicate hosts in the address list are removed.
-    
+        Duplicate hosts in the address list are removed by
+        default. Add {dedup, false} to options to disable this behaviour.
+
+        By default only one address per hostname is pinged. To
+        enable pinging all addresses per hostname pass {multi, true}
+        to options
+
         A ping payload contains a 12 byte timestamp generated using
         erlang:now/0. When creating a custom payload, the first 12 bytes of
         the ICMP echo reply payload will be used for calculating the elapsed
