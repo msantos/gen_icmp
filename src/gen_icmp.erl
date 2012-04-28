@@ -111,9 +111,11 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Data = proplists:get_value(data, Options, payload(echo)),
     Timeout = proplists:get_value(timeout, Options, ?PING_TIMEOUT),
     Timestamp = proplists:get_value(timestamp, Options, true),
-    Hosts2 = addr_list(Hosts),
+    Dedup = proplists:get_value(dedup, Options, true),
+    Multi = proplists:get_value(multi, Options, false),
+    Hosts2 = addr_list(Hosts, Dedup, Multi),
     {Addresses, Errors} = lists:partition(fun({ok, _, _}) -> true;
-                                             (_) -> false 
+                                             (_) -> false
                                           end,  Hosts2),
     case Addresses of
         [] ->
@@ -375,21 +377,43 @@ payload(echo) ->
 %%
 %% ping
 %%
-addr_list(Hosts) ->
-    sets:to_list(sets:from_list(lists:flatten([ parse(Host) || Host <- Hosts ]))).
+addr_list(Hosts, false, Multi) ->
+    addr_list0(Hosts, Multi);
+addr_list(Hosts, true, Multi) ->
+    resdedup(addr_list0(Hosts, Multi)).
+
+resdedup(List) ->
+    resdedup0(lists:keysort(3, List)).
+resdedup0([{ok, _, IP} = A, {ok, _, IP} | List]) ->
+    resdedup0([A | List]);
+resdedup0([A|List]) ->
+    [A | resdedup0(List)];
+resdedup0([]) ->
+    [].
+
+addr_list0(Hosts, true) ->
+    [ begin
+          {ok, Host, Ips} = parse(Host),
+          [ {ok, Host, Ip} || Ip <- Ips ]
+      end || Host <- Hosts ];
+addr_list0(Hosts, false) ->
+    [ begin
+          {ok, Host, [IP|_]} = parse(Host),
+          {ok, Host, IP}
+      end || Host <- Hosts ].
 
 parse(Addr) when is_list(Addr) ->
     parse_or_resolve(Addr, inet_parse:address(Addr));
 parse(Addr) when is_tuple(Addr) ->
-    {ok, Addr, Addr}.
+    {ok, Addr, [Addr]}.
 
 parse_or_resolve(Addr, {ok, IP}) ->
-    {ok, Addr, IP};
+    {ok, Addr, [IP]};
 parse_or_resolve(Addr, {error, einval}) ->
-    case inet_res:gethostbyname(Addr) of
-        {ok, #hostent{h_addr_list = IPs}} -> 
-            [ {ok, Addr, IP} || IP <- IPs ];
-        _ -> 
+    case inet:gethostbyname(Addr) of
+        {ok, #hostent{h_addr_list = IPs}} ->
+            {ok, Addr, lists:usort(IPs)};
+        _ ->
             [ {error, Addr, nxdomain} ]
     end.
 

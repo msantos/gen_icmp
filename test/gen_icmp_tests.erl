@@ -47,6 +47,12 @@ multiple_hosts_ok_test() ->
      {ok,{127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
 
+multiple_hosts_no_dedup_ok_test() ->
+    [{ok,"www.google.com", {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.0.1", {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,{127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"], [{dedup, false}]).
+
 single_host_timeout_test() ->
     [{{error,timeout},"192.168.209.244",{192,168,209,244}}] = gen_icmp:ping("192.168.209.244", [{timeout, 5}]).
 

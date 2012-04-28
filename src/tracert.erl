@@ -94,7 +94,7 @@ host(Host, Options) ->
     Path.
 
 host(Ref, Host, Options) ->
-    [{ok, _, Daddr}] = gen_icmp:parse(Host),
+    {ok, _, [Daddr]} = gen_icmp:parse(Host),
     State = proplist_to_record(Options),
     ok = gen_server:call(Ref, {handler, State#state.handler}, infinity),
     trace(Ref, State#state{daddr = Daddr}).
