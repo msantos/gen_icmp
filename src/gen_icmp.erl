@@ -111,18 +111,25 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Data = proplists:get_value(data, Options, payload(echo)),
     Timeout = proplists:get_value(timeout, Options, ?PING_TIMEOUT),
     Timestamp = proplists:get_value(timestamp, Options, true),
-    Addresses = addr_list(Hosts),
-    [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || Addr <- Addresses ],
-    Reply = ping_reply(Addresses, #ping_opt{
-            s = Socket,
-            id = Id,
-            sequence = Seq,
-            timeout = Timeout,
-            timestamp = Timestamp
-        }),
-    Reply1 = ping_timeout(Addresses, Reply),
-    flush_events(Socket),
-    Reply1.
+    Hosts2 = addr_list(Hosts),
+    {Addresses, Errors} = lists:partition(fun({ok, _, _}) -> true;
+                                             (_) -> false 
+                                          end,  Hosts2),
+    case Addresses of
+        [] ->
+            Errors;
+        _ ->
+            [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || {ok, _Host, Addr} <- Addresses ],
+            {Timeouts, Replies} = ping_reply(Addresses, #ping_opt{
+                                             s = Socket,
+                                             id = Id,
+                                             sequence = Seq,
+                                             timeout = Timeout,
+                                             timestamp = Timestamp
+                                            }),
+            flush_events(Socket),
+            Errors ++ Timeouts ++ Replies
+    end.
 
 
 %%-------------------------------------------------------------------------
@@ -369,24 +376,22 @@ payload(echo) ->
 %% ping
 %%
 addr_list(Hosts) ->
-    sets:to_list(sets:from_list([ parse(Host) || Host <- Hosts ])).
+    sets:to_list(sets:from_list(lists:flatten([ parse(Host) || Host <- Hosts ]))).
 
 parse(Addr) when is_list(Addr) ->
     parse_or_resolve(Addr, inet_parse:address(Addr));
 parse(Addr) when is_tuple(Addr) ->
-    Addr.
+    {ok, Addr, Addr}.
 
-parse_or_resolve(_Addr, {ok, IP}) ->
-    IP;
+parse_or_resolve(Addr, {ok, IP}) ->
+    {ok, Addr, IP};
 parse_or_resolve(Addr, {error, einval}) ->
     case inet_res:gethostbyname(Addr) of
-        {ok, #hostent{h_addr_list = [IP|_IPs]}} -> IP;
-        _ -> throw({badarg, Addr})
+        {ok, #hostent{h_addr_list = IPs}} -> 
+            [ {ok, Addr, IP} || IP <- IPs ];
+        _ -> 
+            [ {error, Addr, nxdomain} ]
     end.
-
-ping_timeout(A,B) ->
-    B1 = [ X || {_,X,_} <- B ],
-    B ++ [ {{error, timeout}, X} || X <- A -- B1 ].
 
 ping_reply(Hosts, #ping_opt{s = Socket, timeout = Timeout} = Opt) ->
     Pid = self(),
@@ -395,8 +400,9 @@ ping_reply(Hosts, #ping_opt{s = Socket, timeout = Timeout} = Opt) ->
 
 ping_loop([], Acc, #ping_opt{tref = TRef}) ->
     erlang:cancel_timer(TRef),
-    Acc;
+    {[], Acc};
 ping_loop(Hosts, Acc, #ping_opt{
+        tref = TRef,
         s = Socket,
         id = Id,
         sequence = Seq,
@@ -412,21 +418,23 @@ ping_loop(Hosts, Acc, #ping_opt{
                 false ->
                     {0, Data}
             end,
-            ping_loop(Hosts -- [Address], [{ok, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
-        {icmp, Socket, {SA1,SA2,SA3,SA4},
-            <<Type:8, Code:8, _Checksum1:16, _Unused:32,
-            4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
-            _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
-            SA1:8, SA2:8, SA3:8, SA4:8,
-            DA1:8, DA2:8, DA3:8, DA4:8,
-            ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq:16,
-            _/binary>> = Data} ->
+            {value, {ok, Addr, Address}, Hosts2} = lists:keytake(Address, 3, Hosts),
+            ping_loop(Hosts2, [{ok, Addr, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+        {icmp, Socket, {SA1,SA2,SA3,SA4}, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+                                            4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
+                                            _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
+                                            SA1:8, SA2:8, SA3:8, SA4:8,
+                                            DA1:8, DA2:8, DA3:8, DA4:8,
+                                            ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq:16,
+                                            _/binary>> = Data} ->
             <<_:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
-            ping_loop(Hosts -- [DA], [{{error, code({Type, Code})}, DA, {{Id, Seq}, Payload}}|Acc],
-                Opt);
+            {value, {ok, Addr, DA}, Hosts2} = lists:keytake(DA, 3, Hosts),
+            ping_loop(Hosts2, [{{error, code({Type, Code})}, Addr, DA, {{Id, Seq}, Payload}}|Acc], Opt);
         {icmp, Socket, timeout} ->
-            ping_loop([], Acc, Opt)
+            erlang:cancel_timer(TRef),
+            Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP} <- Hosts ],
+            {Timeouts, Acc}
     end.
 
 
