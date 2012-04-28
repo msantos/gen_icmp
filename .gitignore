@@ -1,2 +1,5 @@
 *.[oa]
 *.beam
+/ebin/gen_icmp.app
+/deps/*
+/.eunit/

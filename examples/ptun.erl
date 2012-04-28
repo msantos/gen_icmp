@@ -96,7 +96,7 @@ accept(Addr, ICMP, Listen) ->
         ts = Socket,
         id = crypto:rand_uniform(0, 16#FFFF)
     },
-    [{ok, Addr, _}] = gen_icmp:ping(ICMP, [Addr], [
+    [{ok, Addr, _, _}] = gen_icmp:ping(ICMP, [Addr], [
             {id, State#state.id},
             {sequence, 0},
             {timeout, ?TIMEOUT}
@@ -140,7 +140,7 @@ proxy(#state{
 % To keep it simple, we use 64 byte packets
 % 4 bytes header, 2 bytes type, 2 bytes code, 2 bytes data length, 54 bytes data
 send(<<Data:42/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, seq = Seq} = State) ->
-    [{ok, Addr, _}] = gen_icmp:ping(Socket, [Addr], [
+    [{ok, Addr, _, _}] = gen_icmp:ping(Socket, [Addr], [
             {id, Id},
             {sequence, Seq},
             {timeout, ?TIMEOUT},
@@ -150,7 +150,7 @@ send(<<Data:42/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, s
     send(Rest, State#state{seq = Seq + 1});
 send(Data, #state{is = Socket, addr = Addr, id = Id, seq = Seq}) ->
     Len = byte_size(Data),
-    [{ok, Addr, _}] = gen_icmp:ping(Socket, [Addr], [
+    [{ok, Addr, _, _}] = gen_icmp:ping(Socket, [Addr], [
             {id, Id},
             {sequence, Seq},
             {timeout, ?TIMEOUT},

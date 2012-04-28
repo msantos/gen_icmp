@@ -1,21 +1,21 @@
 %% Copyright (c) 2012, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
-%% 
+%%
 %% Redistribution and use in source and binary forms, with or without
 %% modification, are permitted provided that the following conditions
 %% are met:
-%% 
+%%
 %% Redistributions of source code must retain the above copyright
 %% notice, this list of conditions and the following disclaimer.
-%% 
+%%
 %% Redistributions in binary form must reproduce the above copyright
 %% notice, this list of conditions and the following disclaimer in the
 %% documentation and/or other materials provided with the distribution.
-%% 
+%%
 %% Neither the name of the author nor the names of its contributors
 %% may be used to endorse or promote products derived from this software
 %% without specific prior written permission.
-%% 
+%%
 %% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 %% "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 %% LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
@@ -36,24 +36,30 @@
 
 
 single_host_ok_test() ->
-    [{ok,{_,_,_,_},
+    [{ok,"www.google.com", {_,_,_,_},
             {{_,_,_},
                 <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] = gen_icmp:ping("www.google.com").
 
 % multiple hosts specified as strings and tuples, expect 2 responses
 % only since we have a duplicate entries
 multiple_hosts_ok_test() ->
-    [{ok,{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-        {ok,{127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com", {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,{127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
 
+multiple_hosts_no_dedup_ok_test() ->
+    [{ok,"www.google.com", {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.0.1", {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,{127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"], [{dedup, false}]).
+
 single_host_timeout_test() ->
-    [{{error,timeout},{192,168,209,244}}] = gen_icmp:ping("192.168.209.244", [{timeout, 5}]).
+    [{{error,timeout},"192.168.209.244",{192,168,209,244}}] = gen_icmp:ping("192.168.209.244", [{timeout, 5}]).
 
 multiple_host_timeout_test() ->
-    [{ok,{127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {{error,timeout},{192,168,147,147}},
-     {{error,timeout},{192,168,209,244}}] =
+    [{{error,timeout},"192.168.147.147",{192,168,147,147}},
+     {{error,timeout},"192.168.209.244",{192,168,209,244}},
+     {ok,"127.0.0.1",{127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["192.168.209.244", "127.0.0.1", "192.168.147.147"], [{timeout, 5}]).
 
 % Order should be deterministic, since localhost will respond faster
@@ -61,12 +67,12 @@ multiple_host_timeout_test() ->
 reuse_socket_test() ->
     {ok, Socket} = gen_icmp:open(),
 
-    [{ok,{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com",{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.1.1",{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
-    [{ok,{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com",{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.1.1",{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
