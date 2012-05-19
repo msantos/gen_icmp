@@ -44,6 +44,15 @@ traceroute_localhost_test() ->
 
     [{{127,0,0,1},_,echo}] = tracert:path(Path).
 
+traceroute_udp_localhost_test() ->
+    Path = tracert:host("127.0.0.1", [{protocol, udp}]),
+
+    [{{127,0,0,1},
+     _,
+     {icmp,_}}] = Path,
+
+    [{{127,0,0,1}, _, unreach_port}] = tracert:path(Path).
+
 traceroute_multiple_hops_test() ->
     Path = tracert:host({8,8,8,8}),
     true = is_list(tracert:path(Path)).
@@ -55,3 +64,8 @@ traceroute_resolv_multiple_addresses_test() ->
 traceroute_resolv_single_address_test() ->
     Path = tracert:host("erlang.org"),
     true = is_list(tracert:path(Path)).
+
+traceroute_timeout_test() ->
+    [timeout] = tracert:host({255,255,255,254}, [
+                {ttl, 1}, {max_hops, 2}, {timeout, 10}
+                ]).
