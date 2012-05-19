@@ -76,24 +76,3 @@ reuse_socket_test() ->
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
-
-traceroute_localhost_test() ->
-    Path = tracert:host("127.0.0.1"),
-
-    [{{127,0,0,1},
-     _,
-     {icmp,_}}] = Path,
-
-    [{{127,0,0,1},_,echo}] = tracert:path(Path).
-
-traceroute_multiple_hops_test() ->
-    Path = tracert:host({8,8,8,8}),
-    true = is_list(tracert:path(Path)).
-
-traceroute_resolv_multiple_addresses_test() ->
-    Path = tracert:host("google.com"),
-    true = is_list(tracert:path(Path)).
-
-traceroute_resolv_single_address_test() ->
-    Path = tracert:host("erlang.org"),
-    true = is_list(tracert:path(Path)).
