@@ -89,3 +89,11 @@ traceroute_localhost_test() ->
 traceroute_multiple_hops_test() ->
     Path = tracert:host({8,8,8,8}),
     true = is_list(tracert:path(Path)).
+
+traceroute_resolv_multiple_addresses_test() ->
+    Path = tracert:host("google.com"),
+    true = is_list(tracert:path(Path)).
+
+traceroute_resolv_single_address_test() ->
+    Path = tracert:host("erlang.org"),
+    true = is_list(tracert:path(Path)).
