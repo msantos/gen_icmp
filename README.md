@@ -368,5 +368,3 @@ To use the proxy on host1:
 
 
 ### TODO
-
-* support for IPv6 ICMP
