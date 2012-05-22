@@ -49,7 +49,7 @@
 -export([
         echo/2, echo/3,
         type/1, code/1,
-        packet/2,
+        packet/2, packet/3,
         parse/1
     ]).
 
@@ -72,6 +72,14 @@
         tref,
         timestamp = true
     }).
+
+-record(icmp6_pseudohdr, {
+        saddr = {0,0,0,0,0,0,0,0},
+        daddr = {0,0,0,0,0,0,0,0},
+        len = 0,
+        next = ?IPPROTO_ICMPV6,
+        h = #icmp6{}
+        }).
 
 %%-------------------------------------------------------------------------
 %%% API
@@ -129,7 +137,9 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
         [] ->
             Errors;
         _ ->
-            [ spawn(fun() -> gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data)) end) || {ok, _Host, Addr} <- Addresses ],
+            [ spawn(fun() ->
+                            gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data))
+                    end) || {ok, _Host, Addr} <- Addresses ],
             {Timeouts, Replies} = ping_reply(Addresses, #ping_opt{
                                              s = Socket,
                                              id = Id,
@@ -193,19 +203,35 @@ handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
+
+% IPv4 ICMP
 handle_info({udp, Socket, {SA1,SA2,SA3,SA4} = Saddr, 0,
         <<4:4, HL:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
           _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
           SA1:8, SA2:8, SA3:8, SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
           Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
-    Opt = case (HL-5)*4 of
-        N when N > 0 -> N;
-        _ -> 0
+
+    N = (HL-5)*4,
+    Opt = if
+        N > 0 -> N;
+        true -> 0
     end,
+
     <<_:Opt/bits, Payload/bits>> = Data,
     Pid ! {icmp, self(), Saddr, Payload},
     {noreply, State};
+
+% IPv6 ICMP
+handle_info({udp, Socket, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8} = Saddr, 0,
+        <<6:4, _Class:8, _Flow:20,
+          _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
+          SA1:16, SA2:16, SA3:16, SA4:16, SA5:16, SA6:16, SA7:16, SA8:16,
+          _DA1:16, _DA2:16, _DA3:16, _DA4:16, _DA5:16, _DA6:16, _DA7:16, _DA8:16,
+          Data/binary>>},  #state{pid = Pid, s = Socket} = State) ->
+    Pid ! {icmp6, self(), Saddr, Data},
+    {noreply, State};
+
 handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
@@ -223,7 +249,41 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------------
 
 %% Create an ICMP packet
-packet(Header, Payload) when is_list(Header), is_binary(Payload) ->
+packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
+    Sum = pkt:makesum(list_to_binary([
+                pkt:icmp(Header),
+                Payload
+            ])),
+
+    list_to_binary([
+        pkt:icmp(Header#icmp{checksum = Sum}),
+        Payload
+    ]);
+packet(#icmp6_pseudohdr{
+                saddr = Saddr,
+                daddr = Daddr,
+                len = Len,
+                next = Next,
+                h = Header
+                }, Payload) when is_binary(Payload) ->
+    Sum = pkt:makesum(list_to_binary([
+                    <<(inet_parse:ntoa(Saddr)):128,
+                      (inet_parse:ntoa(Daddr)):128,
+                      Len:32,
+                      0:24,
+                      Next:8>>,
+                pkt:icmp6(Header),
+                Payload
+            ])),
+    list_to_binary([
+        pkt:icmp6(Header#icmp{checksum = Sum}),
+        Payload
+    ]);
+packet(Header, Payload) ->
+    packet(icmp, Header, Payload).
+
+% IPv4 ICMP packet
+packet(icmp, Header, Payload) when is_list(Header), is_binary(Payload) ->
     Default = #icmp{},
 
     Type = type_to_uint8(proplists:get_value(type, Header, Default#icmp.type)),
@@ -253,16 +313,45 @@ packet(Header, Payload) when is_list(Header), is_binary(Payload) ->
             ts_tx = TS_tx
         },
     packet(ICMP, Payload);
-packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
-    Sum = pkt:makesum(list_to_binary([
-                pkt:icmp(Header),
-                Payload
-            ])),
 
-    list_to_binary([
-        pkt:icmp(Header#icmp{checksum = Sum}),
-        Payload
-    ]).
+% IPv6 ICMP packet
+packet(icmp6, Header, Payload) when is_list(Header), is_binary(Payload) ->
+    Default = #icmp6{},
+
+    Type = type_to_uint8(proplists:get_value(type, Header, Default#icmp6.type)),
+    Code = code_to_uint8(proplists:get_value(code, Header, Default#icmp6.code)),
+
+    Id = proplists:get_value(id, Header, Default#icmp6.id),
+    Seq = proplists:get_value(sequence, Header, Default#icmp6.seq),
+    UN = proplists:get_value(un, Header, Default#icmp6.un),
+    MTU = proplists:get_value(mtu, Header, Default#icmp6.mtu),
+    Pointer = proplists:get_value(pointer, Header, Default#icmp6.pptr),
+    Maxdelay = proplists:get_value(maxdelay, Header, Default#icmp6.maxdelay),
+
+    % IPv6 pseudoheader
+    Saddr = proplists:get_value(saddr, Header, {0,0,0,0,0,0,0,0}),
+    Daddr = proplists:get_value(daddr, Header, {0,0,0,0,0,0,0,0}),
+    Len = proplists:get_value(len, Header, 0),
+    Next = proplists:get_value(next, Header, ?IPPROTO_ICMPV6),
+
+    Pseudo = #icmp6_pseudohdr{
+            saddr = Saddr,
+            daddr = Daddr,
+            len = Len,
+            next = Next,
+            h = #icmp6{
+                type = Type,
+                code = Code,
+                id = Id,
+                seq = Seq,
+                un = UN,
+                mtu = MTU,
+                pptr = Pointer,
+                maxdelay = Maxdelay
+            }
+        },
+
+    packet(Pseudo, Payload).
 
 type_to_uint8(Type) when is_integer(Type) -> Type;
 type_to_uint8(Type) when is_atom(Type) -> type(Type).
