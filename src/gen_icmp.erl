@@ -37,7 +37,13 @@
 
 -define(PING_TIMEOUT, 5000).
 
--export([open/0, open/2, close/1, send/3, controlling_process/2, setopts/2]).
+-export([
+    open/0, open/1, open/2,
+    close/1,
+    send/3,
+    controlling_process/2,
+    setopts/2
+    ]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/3]).
 -export([
@@ -72,6 +78,8 @@
 %%-------------------------------------------------------------------------
 open() ->
     open([], []).
+open(RawOpts) ->
+    open(RawOpts, []).
 open(RawOpts, SockOpts) ->
     start_link(RawOpts, SockOpts).
 
@@ -144,11 +152,16 @@ start_link(RawOpts, SockOpts) ->
 init([Pid, RawOpts, SockOpts]) ->
     process_flag(trap_exit, true),
 
+    Inet = case proplists:get_value(inet6, RawOpts, false) of
+        false -> inet;
+        true -> inet6
+    end,
+
     {ok, FD} = case proplists:get_value(setuid, RawOpts, true) of
         true ->
-            procket:open(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, inet}]);
+            procket:open(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, Inet}]);
         false ->
-            procket:socket(inet, raw, icmp)
+            procket:socket(Inet, raw, icmp)
     end,
     {ok, Socket} = gen_udp:open(0, SockOpts ++ [binary, {fd, FD}]),
     {ok, #state{
