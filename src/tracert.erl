@@ -358,7 +358,7 @@ proplist_to_record(Options) ->
 icmp_to_atom(ICMP) when is_binary(ICMP) ->
     {#icmp{type = Type,
         code = Code}, _Payload} = pkt:icmp(ICMP),
-    gen_icmp:code({Type,  Code}).
+    icmp_message:code({Type,  Code}).
 
 
 %%
@@ -373,7 +373,7 @@ protocol(udp) ->
 % Default ICMP echo packet
 protocol(icmp) ->
     fun({_Saddr, Sport}, {_Daddr, _Dport}, _TTL) ->
-        gen_icmp:echo(Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
+        gen_icmp:echo(inet, Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
     end.
 
 

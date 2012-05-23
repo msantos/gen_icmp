@@ -42,15 +42,15 @@
     close/1,
     send/3,
     controlling_process/2,
-    setopts/2
+    setopts/2,
+    family/1
     ]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/3]).
 -export([
-        echo/2, echo/3,
-        type/1, code/1,
+        echo/3, echo/4,
         packet/2, packet/3,
-        parse/1
+        parse/1, parse/2
     ]).
 
 -export([start_link/2]).
@@ -59,9 +59,10 @@
 	 terminate/2, code_change/3]).
 
 -record(state, {
-        pid,        % caller PID
-        raw,        % raw socket
-        s           % udp socket
+        family = inet,  % Protocol family (inet, inet6)
+        pid,            % caller PID
+        raw,            % raw socket
+        s               % udp socket
 }).
 
 -record(ping_opt, {
@@ -108,6 +109,9 @@ controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
 setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
     gen_server:call(Ref, {setopts, Options}, infinity).
 
+family(Ref) when is_pid(Ref) ->
+    gen_server:call(Ref, family, infinity).
+
 ping(Host) ->
     ping(Host, []).
 
@@ -116,12 +120,14 @@ ping(Host, Options) when is_tuple(Host) ->
 ping([Char|_] = Host, Options) when is_integer(Char) ->
     ping([Host], Options);
 ping(Hosts, Options) ->
-    {ok, Socket} = gen_icmp:open(),
+    {ok, Socket} = gen_icmp:open(Options),
     Res = ping(Socket, Hosts, Options),
     gen_icmp:close(Socket),
     Res.
 
 ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Options) ->
+    Family = family(Socket),
+
     Id = proplists:get_value(id, Options, erlang:phash2(self(), 16#FFFF)),
     Seq = proplists:get_value(sequence, Options, 0),
     Data = proplists:get_value(data, Options, payload(echo)),
@@ -129,7 +135,8 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Timestamp = proplists:get_value(timestamp, Options, true),
     Dedup = proplists:get_value(dedup, Options, true),
     Multi = proplists:get_value(multi, Options, false),
-    Hosts2 = addr_list(Hosts, Dedup, Multi),
+
+    Hosts2 = addr_list(Family, Hosts, Dedup, Multi),
     {Addresses, Errors} = lists:partition(fun({ok, _, _}) -> true;
                                              (_) -> false
                                           end,  Hosts2),
@@ -138,7 +145,7 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
             Errors;
         _ ->
             [ spawn(fun() ->
-                            gen_icmp:send(Socket, Addr, gen_icmp:echo(Id, Seq, Data))
+                            gen_icmp:send(Socket, Addr, gen_icmp:echo(Family, Id, Seq, Data))
                     end) || {ok, _Host, Addr} <- Addresses ],
             {Timeouts, Replies} = ping_reply(Addresses, #ping_opt{
                                              s = Socket,
@@ -162,19 +169,21 @@ start_link(RawOpts, SockOpts) ->
 init([Pid, RawOpts, SockOpts]) ->
     process_flag(trap_exit, true),
 
-    Inet = case proplists:get_value(inet6, RawOpts, false) of
-        false -> inet;
-        true -> inet6
+    {Protocol, Family} = case proplists:get_value(inet6, RawOpts, false) of
+        false -> {icmp, inet};
+        true -> {'ipv6-icmp', inet6}
     end,
 
     {ok, FD} = case proplists:get_value(setuid, RawOpts, true) of
         true ->
-            procket:open(0, RawOpts ++ [{protocol, icmp}, {type, raw}, {family, Inet}]);
+            procket:open(0, RawOpts ++ [{protocol, Protocol}, {type, raw}, {family, Family}]);
         false ->
-            procket:socket(Inet, raw, icmp)
+            procket:socket(Family, raw, Protocol)
     end,
-    {ok, Socket} = gen_udp:open(0, SockOpts ++ [binary, {fd, FD}]),
+
+    {ok, Socket} = gen_udp:open(0, SockOpts ++ [binary, {fd, FD}, Family]),
     {ok, #state{
+            family = Family,
             pid = Pid,
             raw = FD,
             s = Socket
@@ -194,6 +203,8 @@ handle_call({controlling_process, Pid}, {Owner,_}, #state{pid = Owner} = State) 
     {reply, ok, State#state{pid = Pid}};
 handle_call({setopts, Options}, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
     {reply, inet:setopts(Socket, Options), State};
+handle_call(family, _From, #state{family = Family} = State) ->
+    {reply, Family, State};
 
 handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
@@ -223,12 +234,8 @@ handle_info({udp, Socket, {SA1,SA2,SA3,SA4} = Saddr, 0,
     {noreply, State};
 
 % IPv6 ICMP
-handle_info({udp, Socket, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8} = Saddr, 0,
-        <<6:4, _Class:8, _Flow:20,
-          _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
-          SA1:16, SA2:16, SA3:16, SA4:16, SA5:16, SA6:16, SA7:16, SA8:16,
-          _DA1:16, _DA2:16, _DA3:16, _DA4:16, _DA5:16, _DA6:16, _DA7:16, _DA8:16,
-          Data/binary>>},  #state{pid = Pid, s = Socket} = State) ->
+handle_info({udp, Socket, Saddr, 0, Data},
+            #state{pid = Pid, s = Socket} = State) ->
     Pid ! {icmp6, self(), Saddr, Data},
     {noreply, State};
 
@@ -254,21 +261,21 @@ packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
                 pkt:icmp(Header),
                 Payload
             ])),
-
     list_to_binary([
         pkt:icmp(Header#icmp{checksum = Sum}),
         Payload
     ]);
 packet(#icmp6_pseudohdr{
-                saddr = Saddr,
-                daddr = Daddr,
+                saddr = {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8},
+                daddr = {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8},
                 len = Len,
                 next = Next,
                 h = Header
                 }, Payload) when is_binary(Payload) ->
+
     Sum = pkt:makesum(list_to_binary([
-                    <<(inet_parse:ntoa(Saddr)):128,
-                      (inet_parse:ntoa(Daddr)):128,
+                    <<SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8,
+                      DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8,
                       Len:32,
                       0:24,
                       Next:8>>,
@@ -276,18 +283,22 @@ packet(#icmp6_pseudohdr{
                 Payload
             ])),
     list_to_binary([
-        pkt:icmp6(Header#icmp{checksum = Sum}),
+        pkt:icmp6(Header#icmp6{checksum = Sum}),
         Payload
     ]);
 packet(Header, Payload) ->
-    packet(icmp, Header, Payload).
+    packet(inet, Header, Payload).
 
 % IPv4 ICMP packet
-packet(icmp, Header, Payload) when is_list(Header), is_binary(Payload) ->
+packet(inet, Header, Payload) when is_list(Header), is_binary(Payload) ->
     Default = #icmp{},
 
-    Type = type_to_uint8(proplists:get_value(type, Header, Default#icmp.type)),
-    Code = code_to_uint8(proplists:get_value(code, Header, Default#icmp.code)),
+    Type = icmp_message:type_to_uint8(
+            proplists:get_value(type, Header, Default#icmp.type)
+            ),
+    Code = icmp_message:code_to_uint8(
+            proplists:get_value(code, Header, Default#icmp.code)
+            ),
 
     Id = proplists:get_value(id, Header, Default#icmp.id),
     Seq = proplists:get_value(sequence, Header, Default#icmp.sequence),
@@ -315,11 +326,15 @@ packet(icmp, Header, Payload) when is_list(Header), is_binary(Payload) ->
     packet(ICMP, Payload);
 
 % IPv6 ICMP packet
-packet(icmp6, Header, Payload) when is_list(Header), is_binary(Payload) ->
+packet(inet6, Header, Payload) when is_list(Header), is_binary(Payload) ->
     Default = #icmp6{},
 
-    Type = type_to_uint8(proplists:get_value(type, Header, Default#icmp6.type)),
-    Code = code_to_uint8(proplists:get_value(code, Header, Default#icmp6.code)),
+    Type = icmp6_message:type_to_uint8(
+            proplists:get_value(type, Header, Default#icmp6.type)
+            ),
+    Code = icmp6_message:code_to_uint8(
+            proplists:get_value(code, Header, Default#icmp6.code)
+            ),
 
     Id = proplists:get_value(id, Header, Default#icmp6.id),
     Seq = proplists:get_value(sequence, Header, Default#icmp6.seq),
@@ -353,117 +368,23 @@ packet(icmp6, Header, Payload) when is_list(Header), is_binary(Payload) ->
 
     packet(Pseudo, Payload).
 
-type_to_uint8(Type) when is_integer(Type) -> Type;
-type_to_uint8(Type) when is_atom(Type) -> type(Type).
 
-code_to_uint8(Code) when is_integer(Code) -> Code;
-code_to_uint8(Code) when is_atom(Code) -> code(Code).
-
-echo(Id, Seq) ->
+echo(Family, Id, Seq) ->
     % Pad packet to 64 bytes
-    echo(Id, Seq, payload(echo)).
-echo(Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
+    echo(Family, Id, Seq, payload(echo)).
+echo(Family, Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
     is_integer(Seq), Seq >= 0, Seq < 16#FFFF, is_binary(Payload) ->
-    packet([
-        {type, echo},
+
+    Echo = case Family of
+        inet -> echo;
+        inet6 -> echo_request
+    end,
+
+    packet(Family, [
+        {type, Echo},
         {id, Id},
         {sequence, Seq}
     ], Payload).
-
-
-%%
-%% ICMP control message: types
-%%
-type(?ICMP_ECHOREPLY) -> echoreply;
-type(?ICMP_DEST_UNREACH) -> dest_unreach;
-type(?ICMP_SOURCE_QUENCH) -> source_quench;
-type(?ICMP_REDIRECT) -> redirect;
-type(?ICMP_ECHO) -> echo;
-type(?ICMP_TIME_EXCEEDED) -> time_exceeded;
-type(?ICMP_PARAMETERPROB) -> parameterprob;
-type(?ICMP_TIMESTAMP) -> timestamp;
-type(?ICMP_TIMESTAMPREPLY) -> timestampreply;
-type(?ICMP_INFO_REQUEST) -> info_request;
-type(?ICMP_INFO_REPLY) -> info_reply;
-type(?ICMP_ADDRESS) -> address;
-type(?ICMP_ADDRESSREPLY) -> addressreply;
-
-type(echoreply) -> ?ICMP_ECHOREPLY;
-type(dest_unreach) -> ?ICMP_DEST_UNREACH;
-type(source_quench) -> ?ICMP_SOURCE_QUENCH;
-type(redirect) -> ?ICMP_REDIRECT;
-type(echo) -> ?ICMP_ECHO;
-type(time_exceeded) -> ?ICMP_TIME_EXCEEDED;
-type(parameterprob) -> ?ICMP_PARAMETERPROB;
-type(timestamp) -> ?ICMP_TIMESTAMP;
-type(timestampreply) -> ?ICMP_TIMESTAMPREPLY;
-type(info_request) -> ?ICMP_INFO_REQUEST;
-type(info_reply) -> ?ICMP_INFO_REPLY;
-type(address) -> ?ICMP_ADDRESS;
-type(addressreply) -> ?ICMP_ADDRESSREPLY.
-
-%%
-%% ICMP control message: codes
-%%
-
-% destination unreachable
-code(unreach_net) -> ?ICMP_UNREACH_NET;
-code(unreach_host) -> ?ICMP_UNREACH_HOST;
-code(unreach_protocol) -> ?ICMP_UNREACH_PROTOCOL;
-code(unreach_port) -> ?ICMP_UNREACH_PORT;
-code(unreach_needfrag) -> ?ICMP_UNREACH_NEEDFRAG;
-code(unreach_srcfail) -> ?ICMP_UNREACH_SRCFAIL;
-
-% redirect
-code(redirect_net) -> ?ICMP_REDIRECT_NET;
-code(redirect_host) -> ?ICMP_REDIRECT_HOST;
-code(redirect_tosnet) -> ?ICMP_REDIRECT_TOSNET;
-code(redirect_toshost) -> ?ICMP_REDIRECT_TOSHOST;
-
-% time_exceeded
-code(timxceed_intrans) -> ?ICMP_TIMXCEED_INTRANS;
-code(timxceed_reass) -> ?ICMP_TIMXCEED_REASS;
-
-% XXX create a fake code so:
-% XXX e.g., code(code({?ICMP_ECHO, 0})) == 0
-code(Code) when Code == echoreply; Code == source_quench; Code == echo;
-    Code == parameterprob; Code == timestamp; Code == timestampreply;
-    Code == info_request; Code == info_reply; Code == address;
-    Code == addressreply -> 0;
-
-code({?ICMP_ECHOREPLY, 0}) -> echoreply;
-
-code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_NET}) -> unreach_net;
-code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_HOST}) -> unreach_host;
-code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_PROTOCOL}) -> unreach_protocol;
-code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_PORT}) -> unreach_port;
-code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_NEEDFRAG}) -> unreach_needfrag;
-code({?ICMP_DEST_UNREACH, ?ICMP_UNREACH_SRCFAIL}) -> unreach_srcfail;
-
-code({?ICMP_SOURCE_QUENCH, 0}) -> source_quench;
-
-code({?ICMP_REDIRECT, ?ICMP_REDIRECT_NET}) -> redirect_net;
-code({?ICMP_REDIRECT, ?ICMP_REDIRECT_HOST}) -> redirect_host;
-code({?ICMP_REDIRECT, ?ICMP_REDIRECT_TOSNET}) -> redirect_tosnet;
-code({?ICMP_REDIRECT, ?ICMP_REDIRECT_TOSHOST}) -> redirect_toshost;
-
-code({?ICMP_ECHO, 0}) -> echo;
-
-code({?ICMP_TIME_EXCEEDED, ?ICMP_TIMXCEED_INTRANS}) -> timxceed_intrans;
-code({?ICMP_TIME_EXCEEDED, ?ICMP_TIMXCEED_REASS}) -> timxceed_reass;
-
-code({?ICMP_PARAMETERPROB, 0}) -> parameterprob;
-
-code({?ICMP_TIMESTAMP, 0}) -> timestamp;
-code({?ICMP_TIMESTAMPREPLY, 0}) -> timestampreply;
-
-code({?ICMP_INFO_REQUEST, 0}) -> info_request;
-code({?ICMP_INFO_REPLY, 0}) -> info_reply;
-
-code({?ICMP_ADDRESS, 0}) -> address;
-code({?ICMP_ADDRESSREPLY, 0}) -> addressreply;
-
-code({Type, Code}) -> {unknown, type(Type), code(Code)}.
 
 
 % Default ICMP echo payload
@@ -479,10 +400,10 @@ payload(echo) ->
 %%
 %% ping
 %%
-addr_list(Hosts, false, Multi) ->
-    addr_list0(Hosts, Multi);
-addr_list(Hosts, true, Multi) ->
-    resdedup(addr_list0(Hosts, Multi)).
+addr_list(Family, Hosts, false, Multi) ->
+    addr_list0(Family, Hosts, Multi);
+addr_list(Family, Hosts, true, Multi) ->
+    resdedup(addr_list0(Family, Hosts, Multi)).
 
 resdedup(List) ->
     resdedup0(lists:keysort(3, List)).
@@ -493,26 +414,29 @@ resdedup0([A|List]) ->
 resdedup0([]) ->
     [].
 
-addr_list0(Hosts, true) ->
+addr_list0(Family, Hosts, true) ->
     [ begin
-          {ok, Host, Ips} = parse(Host),
+          {ok, Host, Ips} = parse(Family, Host),
           [ {ok, Host, Ip} || Ip <- Ips ]
       end || Host <- Hosts ];
-addr_list0(Hosts, false) ->
+addr_list0(Family, Hosts, false) ->
     [ begin
-          {ok, Host, [IP|_]} = parse(Host),
+          {ok, Host, [IP|_]} = parse(Family, Host),
           {ok, Host, IP}
       end || Host <- Hosts ].
 
-parse(Addr) when is_list(Addr) ->
-    parse_or_resolve(Addr, inet_parse:address(Addr));
-parse(Addr) when is_tuple(Addr) ->
+parse(Addr) ->
+    parse(inet, Addr).
+
+parse(Family, Addr) when is_list(Addr) ->
+    parse_or_resolve(Family, Addr, inet_parse:address(Addr));
+parse(_Family, Addr) when is_tuple(Addr) ->
     {ok, Addr, [Addr]}.
 
-parse_or_resolve(Addr, {ok, IP}) ->
+parse_or_resolve(_Family, Addr, {ok, IP}) ->
     {ok, Addr, [IP]};
-parse_or_resolve(Addr, {error, einval}) ->
-    case inet:gethostbyname(Addr) of
+parse_or_resolve(Family, Addr, {error, einval}) ->
+    case inet:gethostbyname(Addr, Family) of
         {ok, #hostent{h_addr_list = IPs}} ->
             {ok, Addr, lists:usort(IPs)};
         _ ->
@@ -535,7 +459,8 @@ ping_loop(Hosts, Acc, #ping_opt{
         timestamp = Timestamp
     } = Opt) ->
     receive
-        {icmp, Socket, Address,
+        % IPv4 ICMP Echo Reply
+        {icmp, Socket, {_,_,_,_} = Address,
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -546,6 +471,8 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {value, {ok, Addr, Address}, Hosts2} = lists:keytake(Address, 3, Hosts),
             ping_loop(Hosts2, [{ok, Addr, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+
+        % IPv4 ICMP Error
         {icmp, Socket, {SA1,SA2,SA3,SA4}, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                                             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
                                             _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
@@ -553,11 +480,39 @@ ping_loop(Hosts, Acc, #ping_opt{
                                             DA1:8, DA2:8, DA3:8, DA4:8,
                                             ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq:16,
                                             _/binary>> = Data} ->
-            <<_:8/bytes, Payload/binary>> = Data,
+            <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
             {value, {ok, Addr, DA}, Hosts2} = lists:keytake(DA, 3, Hosts),
-            ping_loop(Hosts2, [{{error, code({Type, Code})}, Addr, DA, {{Id, Seq}, Payload}}|Acc], Opt);
-        {icmp, Socket, timeout} ->
+            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, {{Id, Seq}, Payload}}|Acc], Opt);
+
+        % IPv6 ICMP Echo Reply
+        {icmp6, Socket, {_,_,_,_,_,_,_,_} = Address,
+            <<?ICMP6_ECHO_REPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
+            {Elapsed, Payload} = case Timestamp of
+                true ->
+                    <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
+                    {timer:now_diff(now(), {Mega,Sec,USec}), Data1};
+                false ->
+                    {0, Data}
+            end,
+            {value, {ok, Addr, Address}, Hosts2} = lists:keytake(Address, 3, Hosts),
+            ping_loop(Hosts2, [{ok, Addr, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+
+        % IPv6 ICMP Error
+        {icmp6, Socket, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8}, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+                    6:4, _Class:8, _Flow:20,
+                    _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
+                    SA1:16, SA2:16, SA3:16, SA4:16, SA5:16, SA6:16, SA7:16, SA8:16,
+                    DA1:16, DA2:16, DA3:16, DA4:16, DA5:16, DA6:16, DA7:16, DA8:16,
+                    ?ICMP6_ECHO_REPLY:8, 0:8, _Checksum2:16, Id:16, Seq:16,
+                    _/binary>> = Data} ->
+            <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
+            DA = {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8},
+            {value, {ok, Addr, DA}, Hosts2} = lists:keytake(DA, 3, Hosts),
+            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, {{Id, Seq}, Payload}}|Acc], Opt);
+
+        % IPv4/IPv6 timeout on socket
+        {Family, Socket, timeout} when Family =:= icmp; Family =:= icmp6 ->
             erlang:cancel_timer(TRef),
             Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP} <- Hosts ],
             {Timeouts, Acc}

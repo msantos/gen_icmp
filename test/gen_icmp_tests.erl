@@ -76,3 +76,17 @@ reuse_socket_test() ->
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
+
+ipv6_single_host_ok_test() ->
+    [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_}, {{_,_,_},
+     <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] = gen_icmp:ping("ipv6.google.com", [inet6]).
+
+ipv6_multiple_hosts_ok_test() ->
+    [{ok,"tunnelbroker.net",
+     {_,_,_,_,_,_,_,_},
+     {{_,_,_},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"ipv6.google.com",
+     {_,_,_,_,_,_,_,_},
+     {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]).
