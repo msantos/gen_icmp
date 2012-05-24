@@ -1,8 +1,8 @@
 
-gen\_icmp aspires to be a simple interface for using ICMP sockets in
-Erlang, just like gen\_tcp and gen\_udp do for their protocol types;
-incidentally messing up Google searches for whomever someday writes a
-proper gen\_icmp module.
+gen\_icmp aspires to be a simple interface for using ICMP and ICMPv6
+sockets in Erlang, just like gen\_tcp and gen\_udp do for their protocol
+types; incidentally messing up Google searches for whomever someday
+writes a proper gen\_icmp module.
 
 gen\_icmp uses procket to get a raw socket and abuses gen\_udp for the
 socket handling. gen\_icmp should work on Linux and BSDs.
@@ -16,6 +16,7 @@ version. If you just need a simple example of sending a ping, also see:
 ## EXPORTS
 
     open() -> {ok, Socket} | {error, Error}
+    open(SocketOptions) -> {ok, Socket} | {error, Error}
     open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
     
         Types   Socket = pid()
@@ -23,7 +24,7 @@ version. If you just need a simple example of sending a ping, also see:
                 RawOption = options()
                 SocketOptions = SocketOpt
                 SocketOpt = [ {active, true} | {active, once} |
-                    {active, false} ]
+                    {active, false} | inet | inet6 ]
     
         See the procket README for the raw socket options. If the
         {setuid,false} option is used, gen_icmp will not fork the setuid
@@ -104,7 +105,7 @@ version. If you just need a simple example of sending a ping, also see:
                 Hosts = [ tuple() | string() ]
                 Options = [ Option ]
                 Option = {id, Id} | {sequence, Sequence} | {timeout, Timeout} | {data, Data} |
-                    {timestamp, boolean()}
+                    {timestamp, boolean()} | inet | inet6
                 Id = uint16()
                 Sequence = uint16()
                 Timeout = int() 
@@ -285,27 +286,43 @@ executable needs superuser privileges).
 
 ### Simple ping interface
 
-    1> gen_icmp:ping("www.yahoo.com").
-    [{ok,{67,195,160,76},
-         {{38223,0,47888},
-          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+    1> gen_icmp:ping("www.google.com").
+    [{ok,"www.google.com",
+     {74,125,228,84},
+     {74,125,228,84},
+     {{3275,0,317434},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
     
     2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
     
-    [{{error,unreach_host},
+    [{{error,timeout},"193.180.168.20",{193,180,168,20}},
+     {{error,unreach_host},
       {192,168,213,4},
-      {{2882,0},
-      <<69,0,0,84,0,0,64,0,64,1,14,220,192,168,213,119,192,
-        168,213,4,8,0,29,...>>}},
-     {ok,{193,180,168,20},
-         {{2882,0,126078},
-          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,{192,0,32,10},
-         {{2882,0,94281},
-          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,{69,147,125,65},
-         {{2882,0,29866},
-          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+      {192,168,213,4},
+      {192,168,213,54},
+      {{3275,2},
+       <<69,0,0,84,0,0,64,0,64,1,15,29,192,168,213,54,192,168,
+         213,4,...>>}},
+      {ok,{192,0,32,10},
+          {192,0,32,10},
+          {192,0,32,10},
+          {{3275,1,80903},
+           <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+      {ok,"www.google.com",
+          {74,125,228,84},
+          {74,125,228,84},
+          {{3275,0,40248},
+           <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+
+### IPv6
+
+    1> gen_icmp:ping("ipv6.google.com", [inet6]).
+    [{ok,"ipv6.google.com",
+     {9735,63664,16386,2049,0,0,0,4116},
+     {9735,63664,16386,2049,0,0,0,4116},
+     {{3275,0,205890},
+     <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+
 
 ### Re-using the ICMP ping socket
 
