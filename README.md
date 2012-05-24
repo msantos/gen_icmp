@@ -397,3 +397,7 @@ To use the proxy on host1:
 ### TODO
 
 * tests: do not depend on list order
+
+* handle rfc 4884 (Extended ICMP to Support Multi-Part Messages)
+
+* handle ICMP router renumbering messages
