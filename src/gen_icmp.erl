@@ -242,7 +242,7 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
 % IPv6 ICMP
 handle_info({udp, Socket, {_,_,_,_,_,_,_,_} = Saddr, 0, Data},
             #state{pid = Pid, s = Socket} = State) ->
-    Pid ! {icmp6, self(), Saddr, Data},
+    Pid ! {icmp, self(), Saddr, Data},
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -492,7 +492,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc], Opt);
 
         % IPv6 ICMP Echo Reply
-        {icmp6, Socket, {_,_,_,_,_,_,_,_} = Reply,
+        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply,
             <<?ICMP6_ECHO_REPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -505,7 +505,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             ping_loop(Hosts2, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
 
         % IPv6 ICMP Error
-        {icmp6, Socket, {_,_,_,_,_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                     6:4, _Class:8, _Flow:20,
                     _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
                     _SA1:16, _SA2:16, _SA3:16, _SA4:16, _SA5:16, _SA6:16, _SA7:16, _SA8:16,
@@ -518,7 +518,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc], Opt);
 
         % IPv4/IPv6 timeout on socket
-        {Family, Socket, timeout} when Family =:= icmp; Family =:= icmp6 ->
+        {icmp, Socket, timeout} ->
             erlang:cancel_timer(TRef),
             Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts ],
             {Timeouts, Acc}
