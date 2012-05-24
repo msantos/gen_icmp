@@ -145,8 +145,7 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
                     {NHosts, [Err|Nerr], NSeq}
             end,
             {[], [], Seq},
-            Hosts2
-            ),
+            Hosts2),
 
     case Addresses of
         [] ->
@@ -223,10 +222,10 @@ handle_cast(Msg, State) ->
 
 
 % IPv4 ICMP
-handle_info({udp, Socket, {SA1,SA2,SA3,SA4} = Saddr, 0,
+handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
         <<4:4, HL:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
           _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
-          SA1:8, SA2:8, SA3:8, SA4:8,
+          _SA1:8, _SA2:8, _SA3:8, _SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
           Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
 
