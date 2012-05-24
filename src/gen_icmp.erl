@@ -240,7 +240,7 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
     {noreply, State};
 
 % IPv6 ICMP
-handle_info({udp, Socket, Saddr, 0, Data},
+handle_info({udp, Socket, {_,_,_,_,_,_,_,_} = Saddr, 0, Data},
             #state{pid = Pid, s = Socket} = State) ->
     Pid ! {icmp6, self(), Saddr, Data},
     {noreply, State};
