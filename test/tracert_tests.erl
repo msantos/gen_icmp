@@ -67,5 +67,5 @@ traceroute_resolv_single_address_test() ->
 
 traceroute_timeout_test() ->
     [timeout] = tracert:host({255,255,255,254}, [
-                {ttl, 1}, {max_hops, 2}, {timeout, 10}
+                {ttl, 1}, {max_hops, 2}, {timeout, 5}
                 ]).

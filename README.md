@@ -110,35 +110,45 @@ version. If you just need a simple example of sending a ping, also see:
                 Timeout = int() 
                 Data = binary()
                 Responses = [ Response ]
-                Response = {ok, Host, Address, {Id, Sequence, Elapsed, Payload}} |
-                    {{error, Error}, Host, Address, {Id, Sequence, Payload}} | {{error, timeout}, Address}
+                Response = {ok, Host, Address, ReplyAddr, {Id, Sequence, Elapsed, Payload}} |
+                    {{error, Error}, Host, Address, ReplyAddr, {Id, Sequence, Payload}} | {{error, timeout}, Address}
+                ReplyAddr = tuple()
                 Elapsed = int()
                 Payload = binary()
                 Error = unreach_host | timxceed_intrans
     
-        Convenience function to send a single ping packet. The argument to
-        ping/1 can be either a hostname or a list of hostnames.
-    
-        The ping/3 function blocks until either an ICMP ECHO REPLY is received
-        from all hosts or Timeout is reached.
-    
+        ping/1 is a convenience function to send a single ping
+        packet. The argument to ping/1 can be either a hostname or a
+        list of hostnames.
+
+        The ping/3 function blocks until either an ICMP ECHO REPLY is
+        received from all hosts or Timeout is reached.
+
         Id and sequence are used to differentiate ping responses. Usually,
         the sequence is incremented for each ping in one run.
-    
-        A list of responses is returned. If the ping was successful, the
-        elapsed time is included (calculated by subtracting the current time
-        from the time we sent in the ICMP ECHO packet and returned to us in
-        the ICMP ECHOREPLY payload).
-    
-        The timeout is set for all ICMP packets and is set after all packets
-        have been sent out.
-    
+
+        A list of responses is returned. If the ping was successful,
+        the elapsed time is included (calculated by subtracting the
+        current time from the time we sent in the ICMP ECHO packet and
+        returned to us in the ICMP ECHOREPLY payload) where:
+
+            Host: the provided hostname
+
+            Address: the resolved IPv4 or IPv6 network address represented
+            as a 4 or 8-tuple used in the ICMP echo request
+
+            ReplyAddr: the IPv4 or IPv6 network address originating the
+            ICMP echo reply
+
+        The timeout is set for all ICMP packets and is set after all
+        packets have been sent out.
+
         ping/1 and ping/2 open and close an ICMP socket for the user. For
         best performance, ping/3 should be used instead, with the socket
         being maintained between runs.
-    
-        Duplicate hosts in the address list are removed by
-        default. Add {dedup, false} to options to disable this behaviour.
+
+        Duplicate hosts in the address list are removed by default. Add
+        {dedup, false} to options to disable this behaviour.
 
         By default only one address per hostname is pinged. To
         enable pinging all addresses per hostname pass {multi, true}
@@ -368,3 +378,5 @@ To use the proxy on host1:
 
 
 ### TODO
+
+* tests: do not depend on list order

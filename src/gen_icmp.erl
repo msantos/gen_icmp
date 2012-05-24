@@ -137,20 +137,27 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Multi = proplists:get_value(multi, Options, false),
 
     Hosts2 = addr_list(Family, Hosts, Dedup, Multi),
-    {Addresses, Errors} = lists:partition(fun({ok, _, _}) -> true;
-                                             (_) -> false
-                                          end,  Hosts2),
+
+    {Addresses, Errors, _} = lists:foldl(
+            fun({ok, Host, Addr}, {NHosts, Nerr, NSeq}) ->
+                    {[{ok, Host, Addr, NSeq}|NHosts], Nerr, NSeq+1};
+               (Err, {NHosts, Nerr, NSeq}) ->
+                    {NHosts, [Err|Nerr], NSeq}
+            end,
+            {[], [], Seq},
+            Hosts2
+            ),
+
     case Addresses of
         [] ->
             Errors;
         _ ->
             [ spawn(fun() ->
-                            gen_icmp:send(Socket, Addr, gen_icmp:echo(Family, Id, Seq, Data))
-                    end) || {ok, _Host, Addr} <- Addresses ],
+                            gen_icmp:send(Socket, Addr, gen_icmp:echo(Family, Id, S, Data))
+                    end) || {ok, _Host, Addr, S} <- Addresses ],
             {Timeouts, Replies} = ping_reply(Addresses, #ping_opt{
                                              s = Socket,
                                              id = Id,
-                                             sequence = Seq,
                                              timeout = Timeout,
                                              timestamp = Timestamp
                                             }),
@@ -455,12 +462,12 @@ ping_loop(Hosts, Acc, #ping_opt{
         tref = TRef,
         s = Socket,
         id = Id,
-        sequence = Seq,
         timestamp = Timestamp
     } = Opt) ->
     receive
+
         % IPv4 ICMP Echo Reply
-        {icmp, Socket, {_,_,_,_} = Address,
+        {icmp, Socket, {_,_,_,_} = Reply,
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -469,24 +476,24 @@ ping_loop(Hosts, Acc, #ping_opt{
                 false ->
                     {0, Data}
             end,
-            {value, {ok, Addr, Address}, Hosts2} = lists:keytake(Address, 3, Hosts),
-            ping_loop(Hosts2, [{ok, Addr, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+            {value, {ok, Addr, Address, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
+            ping_loop(Hosts2, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
 
         % IPv4 ICMP Error
-        {icmp, Socket, {SA1,SA2,SA3,SA4}, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp, Socket, {_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                                             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
                                             _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
-                                            SA1:8, SA2:8, SA3:8, SA4:8,
+                                            _SA1:8, _SA2:8, _SA3:8, _SA4:8,
                                             DA1:8, DA2:8, DA3:8, DA4:8,
                                             ?ICMP_ECHO:8, 0:8, _Checksum2:16, Id:16, Seq:16,
                                             _/binary>> = Data} ->
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
-            {value, {ok, Addr, DA}, Hosts2} = lists:keytake(DA, 3, Hosts),
-            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, {{Id, Seq}, Payload}}|Acc], Opt);
+            {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
+            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc], Opt);
 
         % IPv6 ICMP Echo Reply
-        {icmp6, Socket, {_,_,_,_,_,_,_,_} = Address,
+        {icmp6, Socket, {_,_,_,_,_,_,_,_} = Reply,
             <<?ICMP6_ECHO_REPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -495,26 +502,26 @@ ping_loop(Hosts, Acc, #ping_opt{
                 false ->
                     {0, Data}
             end,
-            {value, {ok, Addr, Address}, Hosts2} = lists:keytake(Address, 3, Hosts),
-            ping_loop(Hosts2, [{ok, Addr, Address, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+            {value, {ok, Addr, Address, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
+            ping_loop(Hosts2, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
 
         % IPv6 ICMP Error
-        {icmp6, Socket, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8}, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp6, Socket, {_,_,_,_,_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                     6:4, _Class:8, _Flow:20,
                     _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
-                    SA1:16, SA2:16, SA3:16, SA4:16, SA5:16, SA6:16, SA7:16, SA8:16,
+                    _SA1:16, _SA2:16, _SA3:16, _SA4:16, _SA5:16, _SA6:16, _SA7:16, _SA8:16,
                     DA1:16, DA2:16, DA3:16, DA4:16, DA5:16, DA6:16, DA7:16, DA8:16,
                     ?ICMP6_ECHO_REPLY:8, 0:8, _Checksum2:16, Id:16, Seq:16,
                     _/binary>> = Data} ->
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8},
-            {value, {ok, Addr, DA}, Hosts2} = lists:keytake(DA, 3, Hosts),
-            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, {{Id, Seq}, Payload}}|Acc], Opt);
+            {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
+            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc], Opt);
 
         % IPv4/IPv6 timeout on socket
         {Family, Socket, timeout} when Family =:= icmp; Family =:= icmp6 ->
             erlang:cancel_timer(TRef),
-            Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP} <- Hosts ],
+            Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts ],
             {Timeouts, Acc}
     end.
 

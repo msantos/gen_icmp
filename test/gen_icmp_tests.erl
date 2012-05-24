@@ -36,30 +36,30 @@
 
 
 single_host_ok_test() ->
-    [{ok,"www.google.com", {_,_,_,_},
-            {{_,_,_},
+    [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_},
+            {{_,0,_},
                 <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] = gen_icmp:ping("www.google.com").
 
 % multiple hosts specified as strings and tuples, expect 2 responses
 % only since we have a duplicate entries
 multiple_hosts_ok_test() ->
-    [{ok,"www.google.com", {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,{127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
 
 multiple_hosts_no_dedup_ok_test() ->
-    [{ok,"www.google.com", {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,"127.0.0.1", {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,{127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.0.1", {127,0,0,1}, {127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"], [{dedup, false}]).
 
 single_host_timeout_test() ->
     [{{error,timeout},"192.168.209.244",{192,168,209,244}}] = gen_icmp:ping("192.168.209.244", [{timeout, 5}]).
 
 multiple_host_timeout_test() ->
-    [{{error,timeout},"192.168.147.147",{192,168,147,147}},
-     {{error,timeout},"192.168.209.244",{192,168,209,244}},
-     {ok,"127.0.0.1",{127,0,0,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{{error,timeout},"192.168.209.244",{192,168,209,244}},
+     {{error,timeout},"192.168.147.147",{192,168,147,147}},
+     {ok,"127.0.0.1",{127,0,0,1},{127,0,0,1},{{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["192.168.209.244", "127.0.0.1", "192.168.147.147"], [{timeout, 5}]).
 
 % Order should be deterministic, since localhost will respond faster
@@ -67,26 +67,35 @@ multiple_host_timeout_test() ->
 reuse_socket_test() ->
     {ok, Socket} = gen_icmp:open(),
 
-    [{ok,"www.google.com",{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,"127.0.1.1",{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
-    [{ok,"www.google.com",{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-     {ok,"127.0.1.1",{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
 
 ipv6_single_host_ok_test() ->
-    [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_}, {{_,_,_},
+    [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_},{_,_,_,_,_,_,_,_}, {{_,0,_},
      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] = gen_icmp:ping("ipv6.google.com", [inet6]).
 
 ipv6_multiple_hosts_ok_test() ->
     [{ok,"tunnelbroker.net",
      {_,_,_,_,_,_,_,_},
+     {_,_,_,_,_,_,_,_},
      {{_,_,_},
       <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
      {ok,"ipv6.google.com",
      {_,_,_,_,_,_,_,_},
+     {_,_,_,_,_,_,_,_},
      {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
     gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]).
+
+ipv6_different_request_reply_addresses() ->
+    [{ok,"::",
+     {0,0,0,0,0,0,0,0},
+     {0,0,0,0,0,0,0,1},
+     {{_,0,_},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] = gen_icmp:ping("::", [inet6]).
