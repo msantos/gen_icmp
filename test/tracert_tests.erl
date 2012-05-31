@@ -59,11 +59,20 @@ traceroute_multiple_hops_test() ->
 
 traceroute_resolv_multiple_addresses_test() ->
     Path = tracert:host("google.com"),
-    true = is_list(tracert:path(Path)).
+    [{_,_,echoreply} | _] = lists:reverse(tracert:path(Path)).
 
 traceroute_resolv_single_address_test() ->
     Path = tracert:host("erlang.org"),
-    true = is_list(tracert:path(Path)).
+    [{_,_,echoreply} | _] = lists:reverse(tracert:path(Path)).
+
+% Naming for type/code in ICMPv6 differs from ICMP
+traceroute_ipv6_resolv_icmp_test() ->
+    Path = tracert:host("ipv6.google.com", [inet6]),
+    [{_,_,echo_reply} | _] = lists:reverse(tracert:path(Path)).
+
+traceroute_ipv6_resolv_udp_test() ->
+    Path = tracert:host("ipv6.google.com", [inet6, {protocol, udp}]),
+    [{_,_,dst_unreach_noport} | _] = lists:reverse(tracert:path(Path)).
 
 traceroute_timeout_test() ->
     [timeout] = tracert:host({255,255,255,254}, [

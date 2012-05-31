@@ -323,6 +323,8 @@ executable needs superuser privileges).
      {{3275,0,205890},
      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
 
+    2> tracert:host("ipv6.google.com", [inet6]).
+
 
 ### Re-using the ICMP ping socket
 

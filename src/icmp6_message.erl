@@ -101,5 +101,9 @@ code({?ICMP6_PARAM_PROB, ?ICMP6_PARAMPROB_HEADER}) -> paramprob_header;
 code({?ICMP6_PARAM_PROB, ?ICMP6_PARAMPROB_NEXTHEADER}) -> paramprob_nextheader;
 code({?ICMP6_PARAM_PROB, ?ICMP6_PARAMPROB_OPTION}) -> paramprob_option;
 
+% echo
+code({?ICMP6_ECHO_REQUEST, 0}) -> echo_request;
+code({?ICMP6_ECHO_REPLY, 0}) -> echo_reply;
+
 code({Type, Code}) when is_integer(Type), is_integer(Code) ->
     {unknown, Type, Code}.
