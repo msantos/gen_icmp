@@ -475,8 +475,13 @@ ping_loop(Hosts, Acc, #ping_opt{
                 false ->
                     {0, Data}
             end,
-            {value, {ok, Addr, Address, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
-            ping_loop(Hosts2, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+            {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
+                {value, {ok, Addr, Address, Seq}, NHosts} ->
+                    {NHosts, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc]};
+                false ->
+                    {Hosts, Acc}
+            end,
+            ping_loop(Hosts2, Result, Opt);
 
         % IPv4 ICMP Error
         {icmp, Socket, {_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
@@ -488,8 +493,13 @@ ping_loop(Hosts, Acc, #ping_opt{
                                             _/binary>> = Data} ->
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4},
-            {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
-            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc], Opt);
+            {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
+                {value, {ok, Addr, DA, Seq}, NHosts} ->
+                    {NHosts, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc]};
+                false ->
+                    {Hosts, Acc}
+            end,
+            ping_loop(Hosts2, Result, Opt);
 
         % IPv6 ICMP Echo Reply
         {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply,
@@ -501,8 +511,13 @@ ping_loop(Hosts, Acc, #ping_opt{
                 false ->
                     {0, Data}
             end,
-            {value, {ok, Addr, Address, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
-            ping_loop(Hosts2, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc], Opt);
+            {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
+                {value, {ok, Addr, Address, Seq}, NHosts} ->
+                    {NHosts, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc]};
+                false ->
+                    {Hosts, Acc}
+            end,
+            ping_loop(Hosts2, Result, Opt);
 
         % IPv6 ICMP Error
         {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
@@ -515,7 +530,13 @@ ping_loop(Hosts, Acc, #ping_opt{
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8},
             {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
-            ping_loop(Hosts2, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc], Opt);
+            {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
+                {value, {ok, Addr, DA, Seq}, NHosts} ->
+                    {NHosts, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc]};
+                false ->
+                    {Hosts, Acc}
+            end,
+            ping_loop(Hosts2, Result, Opt);
 
         % IPv4/IPv6 timeout on socket
         {icmp, Socket, timeout} ->
