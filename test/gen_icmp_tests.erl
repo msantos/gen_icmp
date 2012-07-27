@@ -77,6 +77,22 @@ reuse_socket_test() ->
 
     ok = gen_icmp:close(Socket).
 
+% This test will not spawn the procket setuid helper. The user or the
+% beam executable will need to have the appropriate permissions to open
+% a raw socket.
+nosetuid_socket_test() ->
+    {ok, Socket} = gen_icmp:open([{setuid, false}], []),
+
+    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+        gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
+
+    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
+     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
+        gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
+
+    ok = gen_icmp:close(Socket).
+
 ipv6_single_host_ok_test() ->
     [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_},{_,_,_,_,_,_,_,_}, {{_,0,_},
      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] = gen_icmp:ping("ipv6.google.com", [inet6]).
