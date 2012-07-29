@@ -53,7 +53,7 @@
         parse/1, parse/2
     ]).
 
--export([start_link/2]).
+-export([start_link/2, start/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
@@ -172,6 +172,13 @@ start_link(RawOpts, SockOpts) ->
     Pid = self(),
     gen_server:start_link(?MODULE, [Pid, RawOpts, SockOpts], []).
 
+start(RawOpts, SockOpts) ->
+    Pid = self(),
+    case gen_server:start(?MODULE, [Pid, RawOpts, SockOpts], []) of
+        {ok, Pid} -> {ok, Pid};
+        {error, Error} -> Error
+    end.
+
 init([Pid, RawOpts, SockOpts]) ->
     process_flag(trap_exit, true),
 
@@ -180,20 +187,29 @@ init([Pid, RawOpts, SockOpts]) ->
         true -> {'ipv6-icmp', inet6}
     end,
 
-    {ok, FD} = case proplists:get_value(setuid, RawOpts, true) of
+    Result = case proplists:get_value(setuid, RawOpts, true) of
         true ->
             procket:open(0, RawOpts ++ [{protocol, Protocol}, {type, raw}, {family, Family}]);
         false ->
             procket:socket(Family, raw, Protocol)
     end,
 
-    {ok, Socket} = gen_udp:open(0, SockOpts ++ [binary, {fd, FD}, Family]),
-    {ok, #state{
-            family = Family,
-            pid = Pid,
-            raw = FD,
-            s = Socket
-        }}.
+    init_1(Pid, Family, SockOpts, Result).
+
+init_1(Pid, Family, SockOpts, {ok, FD}) ->
+    case gen_udp:open(0, SockOpts ++ [binary, {fd, FD}, Family]) of
+        {ok, Socket} ->
+            {ok, #state{
+                family = Family,
+                pid = Pid,
+                raw = FD,
+                s = Socket
+            }};
+        Error ->
+            Error
+    end;
+init_1(_Pid, _Family, _SockOpts, Error) ->
+    {stop, Error}.
 
 handle_call(close, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
     {stop, normal, gen_udp:close(Socket), State};

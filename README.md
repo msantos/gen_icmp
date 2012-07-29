@@ -15,9 +15,9 @@ version. If you just need a simple example of sending a ping, also see:
 
 ## EXPORTS
 
-    open() -> {ok, Socket} | {error, Error}
-    open(SocketOptions) -> {ok, Socket} | {error, Error}
-    open(RawOptions, SocketOptions) -> {ok, Socket} | {error, Error}
+    open() -> {ok, Socket}
+    open(SocketOptions) -> {ok, Socket}
+    open(RawOptions, SocketOptions) -> {ok, Socket}
     
         Types   Socket = pid()
                 RawOptions = [ RawOption | {setuid,boolean()} ]

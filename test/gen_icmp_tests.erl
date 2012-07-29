@@ -81,8 +81,16 @@ reuse_socket_test() ->
 % beam executable will need to have the appropriate permissions to open
 % a raw socket.
 nosetuid_socket_test() ->
-    {ok, Socket} = gen_icmp:open([{setuid, false}], []),
+    case gen_icmp:start([{setuid, false}], []) of
+        {error,eperm} ->
+            error_logger:info_report([{nosetuid_socket_test,
+                                       "beam not running with appropriate privileges, skipping"}]),
+            ok;
+        {ok, Socket} ->
+            nosetuid_socket_test_1(Socket)
+    end.
 
+nosetuid_socket_test_1(Socket) ->
     [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
      {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {{_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
