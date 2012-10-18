@@ -129,9 +129,10 @@ version. If you just need a simple example of sending a ping, also see:
         the sequence is incremented for each ping in one run.
 
         A list of responses is returned. If the ping was successful,
-        the elapsed time is included (calculated by subtracting the
-        current time from the time we sent in the ICMP ECHO packet and
-        returned to us in the ICMP ECHOREPLY payload) where:
+        the elapsed time in microseconds is included (calculated by
+        subtracting the current time from the time we sent in the ICMP
+        ECHO packet and returned to us in the ICMP ECHOREPLY payload)
+        where:
 
             Host: the provided hostname
 
