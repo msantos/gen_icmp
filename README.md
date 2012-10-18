@@ -111,8 +111,8 @@ version. If you just need a simple example of sending a ping, also see:
                 Timeout = int() 
                 Data = binary()
                 Responses = [ Response ]
-                Response = {ok, Host, Address, ReplyAddr, {Id, Sequence, Elapsed, Payload}} |
-                    {{error, Error}, Host, Address, ReplyAddr, {Id, Sequence, Payload}} | {{error, timeout}, Address}
+                Response = {ok, Host, Address, ReplyAddr, {{Id, Sequence, Elapsed}, Payload}} |
+                    {{error, Error}, Host, Address, ReplyAddr, {{Id, Sequence}, Payload}} | {{error, timeout}, Address}
                 ReplyAddr = tuple()
                 Elapsed = int()
                 Payload = binary()
