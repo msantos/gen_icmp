@@ -175,7 +175,7 @@ start_link(RawOpts, SockOpts) ->
 start(RawOpts, SockOpts) ->
     Pid = self(),
     case gen_server:start(?MODULE, [Pid, RawOpts, SockOpts], []) of
-        {ok, Pid} -> {ok, Pid};
+        {ok, Socket} -> {ok, Socket};
         {error, Error} -> Error
     end.
 
