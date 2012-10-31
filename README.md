@@ -111,8 +111,9 @@ version. If you just need a simple example of sending a ping, also see:
                 Timeout = int() 
                 Data = binary()
                 Responses = [ Response ]
-                Response = {ok, Host, Address, ReplyAddr, {{Id, Sequence, Elapsed}, Payload}} |
-                    {{error, Error}, Host, Address, ReplyAddr, {{Id, Sequence}, Payload}} | {{error, timeout}, Address}
+                Response = {ok, Host, Address, ReplyAddr, Id, Sequence, Elapsed, Payload}
+                    | {error, Error, Host, Address, ReplyAddr, Id, Sequence, Payload}
+                    | {error, timeout, Host, Address}
                 ReplyAddr = tuple()
                 Elapsed = int()
                 Payload = binary()
@@ -289,40 +290,39 @@ executable needs superuser privileges).
 
     1> gen_icmp:ping("www.google.com").
     [{ok,"www.google.com",
-     {74,125,228,84},
-     {74,125,228,84},
-     {{3275,0,317434},
-      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
-    
+      {74,125,228,84},
+      {74,125,228,84},
+      3275,0,43001,
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
+
     2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
-    
-    [{{error,timeout},"193.180.168.20",{193,180,168,20}},
-     {{error,unreach_host},
-      {192,168,213,4},
-      {192,168,213,4},
-      {192,168,213,54},
-      {{3275,2},
-       <<69,0,0,84,0,0,64,0,64,1,15,29,192,168,213,54,192,168,
-         213,4,...>>}},
-      {ok,{192,0,32,10},
+    [{error,timeout,"193.180.168.20",{193,180,168,20}},
+     {error,unreach_host,
+            {192,168,213,4},
+            {192,168,213,4},
+            {192,168,213,54},
+            3275,2,
+            <<69,0,0,84,0,0,64,0,64,1,15,29,192,168,213,54,192,168,
+              213,...>>},
+     {ok,{192,0,32,10},
           {192,0,32,10},
           {192,0,32,10},
-          {{3275,1,80903},
-           <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}},
-      {ok,"www.google.com",
-          {74,125,228,84},
-          {74,125,228,84},
-          {{3275,0,40248},
-           <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+          3275,1,108179,
+          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
+     {ok,"www.yahoo.com",
+         {98,139,183,24},
+         {98,139,183,24},
+         3275,0,88690,
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
 ### IPv6
 
     1> gen_icmp:ping("ipv6.google.com", [inet6]).
     [{ok,"ipv6.google.com",
-     {9735,63664,16386,2049,0,0,0,4116},
-     {9735,63664,16386,2049,0,0,0,4116},
-     {{3275,0,205890},
-     <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
+         {9735,63664,16396,3073,0,0,0,99},
+         {9735,63664,16396,3073,0,0,0,99},
+         3275,0,41790,
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
     2> tracert:host("ipv6.google.com", [inet6]).
 

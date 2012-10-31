@@ -493,7 +493,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, Address, Seq}, NHosts} ->
-                    {NHosts, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc]};
+                    {NHosts, [{ok, Addr, Address, Reply, Id, Seq, Elapsed, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
@@ -511,7 +511,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             DA = {DA1,DA2,DA3,DA4},
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, DA, Seq}, NHosts} ->
-                    {NHosts, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc]};
+                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, Id, Seq, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
@@ -529,7 +529,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, Address, Seq}, NHosts} ->
-                    {NHosts, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc]};
+                    {NHosts, [{ok, Addr, Address, Reply, Id, Seq, Elapsed, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
@@ -548,7 +548,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, DA, Seq}, NHosts} ->
-                    {NHosts, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc]};
+                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, Id, Seq, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
@@ -557,7 +557,7 @@ ping_loop(Hosts, Acc, #ping_opt{
         % IPv4/IPv6 timeout on socket
         {icmp, Socket, timeout} ->
             erlang:cancel_timer(TRef),
-            Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts ],
+            Timeouts = [ {error, timeout, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts ],
             {Timeouts, Acc}
     end.
 
