@@ -1,4 +1,4 @@
-%% Copyright (c) 2012, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2012-2013, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
 
 type_to_uint8(Type) when is_integer(Type) -> Type;
 type_to_uint8(Type) when is_atom(Type) -> type(Type).
-  
+
 code_to_uint8(Code) when is_integer(Code) -> Code;
 code_to_uint8(Code) when is_atom(Code) -> code(Code).
 

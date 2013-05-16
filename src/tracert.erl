@@ -1,4 +1,4 @@
-%% Copyright (c) 2011-2012, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2011-2013, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,7 @@
 %%%
 %%% Send a probe packet with the time to live set from 1. Monitor
 %%% an ICMP socket for ICMP responses or timeout.
-%%% 
+%%%
 -module(tracert).
 -behaviour(gen_server).
 

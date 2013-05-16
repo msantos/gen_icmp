@@ -1,4 +1,4 @@
-%% Copyright (c) 2010-2012, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2010-2013, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -35,18 +35,18 @@
 %% Usage:
 %% host1 (1.1.1.1) listens on 127.0.0.1:8787 and forwards data over ICMP
 %%  to host2:
-%% 
+%%
 %% Args: Remote peer, local port
-%% 
+%%
 %% erl -noshell -pa ebin deps/*/ebin -eval 'ptun:server({2,2,2,2},8787)'
 %%
 %% host2 (2.2.2.2) receives ICMP echo requests and forwards the data
 %%  to 127.0.0.1:22
 %%
 %% erl -noshell -pa ebin deps/*/ebin -eval 'ptun:client({1,1,1,1},22)'
-%% 
+%%
 %% Then, on host1: ssh -p 8787 127.0.0.1
-%% 
+%%
 
 -module(ptun).
 -include_lib("pkt/include/pkt.hrl").
