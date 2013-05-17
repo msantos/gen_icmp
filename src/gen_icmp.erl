@@ -258,7 +258,7 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
           _Off:13, TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
           _SA1:8, _SA2:8, _SA3:8, _SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
-          Data/binary>>}, #state{pid = Pid, fd = FD, s = Socket} = State) ->
+          Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
 
     N = (HL-5)*4,
     Opt = if
