@@ -134,7 +134,7 @@ version. If you just need a simple example of sending a ping, also see:
         the sequence is incremented for each ping in one run.
 
         A list of responses is returned. If the ping was successful,
-        the elapsed time in microseconds is included (calculated by
+        the elapsed time in milliseconds is included (calculated by
         subtracting the current time from the time we sent in the ICMP
         ECHO packet and returned to us in the ICMP ECHOREPLY payload)
         where:
@@ -296,7 +296,7 @@ executable needs superuser privileges).
     [{ok,"www.google.com",
          {173,194,64,99},
          {173,194,64,99},
-         18411,0,50466,
+         18411,0,50,
          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
     2> gen_icmp:ping(["www.google.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
@@ -311,24 +311,24 @@ executable needs superuser privileges).
      {ok,{192,0,32,10},
          {192,0,32,10},
          {192,0,32,10},
-         {18411,1,103336},
+         {18411,1,103},
          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
      {ok,"www.google.com",
          {173,194,77,99},
          {173,194,77,99},
-         {18411,0,50139},
+         {18411,0,50},
          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
 ### IPv6
 
-    1> gen_icmp:ping("ipv6.google.com", [inet6]).
-    [{ok,"ipv6.google.com",
-         {9735,63664,16396,3073,0,0,0,99},
-         {9735,63664,16396,3073,0,0,0,99},
-         3275,0,41790,
+    1> gen_icmp:ping("google.com", [inet6]).
+    [{ok,"google.com",
+         {9735,63664,16395,2054,0,0,0,4098},
+         {9735,63664,16395,2054,0,0,0,4098},
+         {18411,0,64,62},
          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
-    2> tracert:host("ipv6.google.com", [inet6]).
+    2> tracert:host("google.com", [inet6]).
 
 
 ### Re-using the ICMP ping socket

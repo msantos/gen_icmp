@@ -520,7 +520,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Elapsed, Payload} = case Timestamp of
                 true ->
                     <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timer:now_diff(now(), {Mega,Sec,USec}), Data1};
+                    {timer:now_diff(now(), {Mega,Sec,USec}) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
@@ -556,7 +556,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Elapsed, Payload} = case Timestamp of
                 true ->
                     <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timer:now_diff(now(), {Mega,Sec,USec}), Data1};
+                    {timer:now_diff(now(), {Mega,Sec,USec}) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
