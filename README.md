@@ -18,86 +18,89 @@ version. If you just need a simple example of sending a ping, also see:
     open() -> {ok, Socket}
     open(SocketOptions) -> {ok, Socket}
     open(RawOptions, SocketOptions) -> {ok, Socket}
-    
+
         Types   Socket = pid()
-                RawOptions = [ RawOption | {setuid,boolean()} ]
+                RawOptions = [ RawOption ]
                 RawOption = options()
                 SocketOptions = SocketOpt
                 SocketOpt = [ {active, true} | {active, once} |
                     {active, false} | inet | inet6 ]
-    
-        See the procket README for the raw socket options. If the
-        {setuid,false} option is used, gen_icmp will not fork the setuid
-        helper program to open the raw socket.  The Erlang VM will require
-        the appropriate privileges to obtain the socket. For example, running
-        as root or on Linux granting the CAP_NET_RAW capability to beam:
-    
+
+        See the procket README for the raw socket options and for
+        instructions on setting up the setuid helper.
+
+        gen_icmp first attempts to natively open the socket and falls
+        back to forking the setuid helper program if beam does not have
+        the appropriate privileges.  Privileges to open a raw socket can
+        be given by, for example, running as root or, on Linux, granting
+        the CAP_NET_RAW capability to beam:
+
             setcap cap_net_raw=ep /usr/local/lib/erlang/erts-5.8.3/bin/beam.smp
-    
+
         Only the owning process will receive ICMP packets (see
         controlling_process/2 to change the owner). The process owning the
         raw socket will receive all ICMP packets sent to the host.
-    
+
         Messages sent to the controlling process are:
-    
+
         {icmp, Socket, Address, Packet}
-    
+
         Where Socket is the pid of the gen_icmp process, Address is a tuple
         representing the IPv4 source address and Packet is the complete
         ICMP packet including the ICMP headers.
-    
+
     close(Socket) -> ok | {error, Reason}
-    
+
         Types   Socket = pid()
                 Reason = posix()
-    
+
         Close the ICMP socket.
-    
+
     send(Socket, Address, Packet) -> ok | {error, Reason}
-    
+
         Types   Socket = pid()
                 Address = tuple()
                 Packet = binary()
                 Reason = not_owner | posix()
-    
+
         Like the gen_udp and gen_tcp modules, any process can send ICMP
         packets but only the owner will receive the responses.
-    
+
     recv(Socket, Length) -> {ok, {Address, Packet}} | {error, Reason}
     recv(Socket, Length, Timeout) -> {ok, {Address, Packet}} | {error, Reason}
-    
+
         Types   Socket = socket()
                 Length = int()
                 Address = ip_address()
                 Packet = [char()] | binary()
                 Timeout = int() | infinity
                 Reason = not_owner | posix()
-    
+
         This function receives a packet from a socket in passive mode.
-    
+
         The optional Timeout parameter specifies a timeout in
         milliseconds. The default value is infinity .
-    
+
     controlling_process(Socket, Pid) -> ok
-    
+
         Types   Socket = pid()
                 Pid = pid()
-    
+
         Change the process owning the socket. Allows another process to
         receive the ICMP responses.
-    
+
     setopts(Socket, Options) ->
-    
+
         Types   Socket = pid()
                 Options = list()
-    
+
         For options, see the inet man page. Simply calls inet:setopts/2
         on the gen_udp socket.
-    
+
     ping(Host) -> Responses
     ping(Host, Options) -> Responses
     ping(Socket, Hosts, Options) -> Responses
-    
+
         Types   Socket = pid()
                 Host = Address | Hostname | Hosts
                 Address = tuple()
@@ -108,7 +111,7 @@ version. If you just need a simple example of sending a ping, also see:
                     {timestamp, boolean()} | inet | inet6
                 Id = uint16()
                 Sequence = uint16()
-                Timeout = int() 
+                Timeout = int()
                 Data = binary()
                 Responses = [ Response ]
                 Response = {ok, Host, Address, ReplyAddr, {{Id, Sequence, Elapsed}, Payload}} |
@@ -117,7 +120,7 @@ version. If you just need a simple example of sending a ping, also see:
                 Elapsed = int()
                 Payload = binary()
                 Error = unreach_host | timxceed_intrans
-    
+
         ping/1 is a convenience function to send a single ping
         packet. The argument to ping/1 can be either a hostname or a
         list of hostnames.
@@ -161,32 +164,32 @@ version. If you just need a simple example of sending a ping, also see:
         the ICMP echo reply payload will be used for calculating the elapsed
         time. To disable this behaviour, use the option {timestamp,false}
         (the elapsed time in the return value will be set to 0).
-    
+
         The timeout defaults to 5 seconds.
-    
+
     echo(Id, Sequence) -> Packet
-    
+
         Types   Id = uint16()
                 Sequence = uint16()
                 Packet = binary()
-    
+
         Creates an ICMP echo packet with the results of erlang:now() used
         as the timestamp and a payload consisting of ASCII 32 to 75.
-    
+
     echo(Id, Sequence, Payload) -> Packet
-    
+
         Types   Id = uint16()
                 Sequence = uint16()
                 Payload = binary()
                 Packet = binary()
-    
+
         Creates an ICMP echo packet with the results of erlang:now() used
         as the timestamp and a user specified payload (which should pad the
         packet to 64 bytes).
-    
-    
+
+
     packet(Header, Payload) -> Packet
-    
+
         Types   Header = [ #icmp{} | Options ]
                 Options = [ Opts ]
                 Opts = [{type, Type} | {code, Code} | {id, Id} | {sequence, Sequence} |
@@ -204,7 +207,7 @@ version. If you just need a simple example of sending a ping, also see:
                 Sequence = uint16()
                 Payload = binary()
                 Packet = binary()
-    
+
         Convenience function for creating arbitrary ICMP packets. This
         function will calculate the ICMP checksum and insert it into the
         packet.
@@ -293,9 +296,9 @@ executable needs superuser privileges).
      {74,125,228,84},
      {{3275,0,317434},
       <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}}]
-    
+
     2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
-    
+
     [{{error,timeout},"193.180.168.20",{193,180,168,20}},
      {{error,unreach_host},
       {192,168,213,4},
@@ -336,23 +339,14 @@ Keeping the ICMP socket around between runs is more efficient:
     P2 = gen_icmp:ping(Socket, [{10,2,2,2}, "www.yahoo.com"], []),
     gen_icmp:close(Socket).
 
-To avoid forking the setuid binary (beam needs the appropriate
-capabilities):
-
-    {ok, Socket} = gen_icmp:open([{setuid,false}], []),
-    P1 = gen_icmp:ping(Socket, [{10,1,1,1}, "www.google.com"], []),
-    P2 = gen_icmp:ping(Socket, [{10,2,2,2}, "www.yahoo.com"], []),
-    gen_icmp:close(Socket).
-
-
 ### Working with ICMP sockets
 
     {ok, Socket} = gen_icmp:open().
-    
+
     % ICMP host unreachable, empty payload (should contain an IPv4 header
     % and the first 8 bytes of the packet data)
     Packet = gen_icmp:packet([{type, 3}, {code, 0}], <<0:160, 0:64>>).
-    
+
     gen_icmp:send(Socket, {127,0,0,1}, Packet).
 
 

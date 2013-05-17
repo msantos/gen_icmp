@@ -187,11 +187,11 @@ init([Pid, RawOpts, SockOpts]) ->
         true -> {'ipv6-icmp', inet6}
     end,
 
-    Result = case proplists:get_value(setuid, RawOpts, true) of
-        true ->
+    Result = case procket:socket(Family, raw, Protocol) of
+        {error, eperm} ->
             procket:open(0, RawOpts ++ [{protocol, Protocol}, {type, raw}, {family, Family}]);
-        false ->
-            procket:socket(Family, raw, Protocol)
+        N ->
+            N
     end,
 
     init_1(Pid, Family, SockOpts, Result).
