@@ -399,7 +399,7 @@ To use the proxy on host1:
 
 * IPv6 traceroute
 
-        1> Path = tracert:host({8,8,8,8}).
+        1> Path = tracert:host("google.com", [inet6]).
 
 ### TODO
 
