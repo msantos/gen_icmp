@@ -103,7 +103,7 @@ version. If you just need a simple example of sending a ping, also see:
 
         Types   Socket = pid()
                 Host = Address | Hostname | Hosts
-                Address = tuple()
+                Address = ReplyAddr = tuple()
                 Hostname = string()
                 Hosts = [ tuple() | string() ]
                 Options = [ Option ]
@@ -114,11 +114,11 @@ version. If you just need a simple example of sending a ping, also see:
                 Timeout = int()
                 Data = binary()
                 Responses = [ Response ]
-                Response = {ok, Host, Address, ReplyAddr, Id, Sequence, Elapsed, Payload}
-                    | {error, Error, Host, Address, ReplyAddr, Id, Sequence, Payload}
+                Response = {ok, Host, Address, ReplyAddr, Details, Payload}
+                    | {error, Error, Host, Address, ReplyAddr, Details, Payload}
                     | {error, timeout, Host, Address}
-                ReplyAddr = tuple()
-                Elapsed = int()
+                Details = {Id, Sequence, Elapsed}
+                Elapsed = int() | undefined
                 Payload = binary()
                 Error = unreach_host | timxceed_intrans
 
@@ -293,29 +293,29 @@ executable needs superuser privileges).
 
     1> gen_icmp:ping("www.google.com").
     [{ok,"www.google.com",
-      {74,125,228,84},
-      {74,125,228,84},
-      3275,0,43001,
-      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
+         {173,194,64,99},
+         {173,194,64,99},
+         18411,0,50466,
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
-    2> gen_icmp:ping(["www.yahoo.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
+    2> gen_icmp:ping(["www.google.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
     [{error,timeout,"193.180.168.20",{193,180,168,20}},
      {error,unreach_host,
             {192,168,213,4},
             {192,168,213,4},
             {192,168,213,54},
-            3275,2,
+            {18411,2,undefined},
             <<69,0,0,84,0,0,64,0,64,1,15,29,192,168,213,54,192,168,
-              213,...>>},
+              213,4,...>>},
      {ok,{192,0,32,10},
-          {192,0,32,10},
-          {192,0,32,10},
-          3275,1,108179,
-          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
-     {ok,"www.yahoo.com",
-         {98,139,183,24},
-         {98,139,183,24},
-         3275,0,88690,
+         {192,0,32,10},
+         {192,0,32,10},
+         {18411,1,103336},
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
+     {ok,"www.google.com",
+         {173,194,77,99},
+         {173,194,77,99},
+         {18411,0,50139},
          <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
 
 ### IPv6
