@@ -47,7 +47,7 @@
 -export([
         open/0, open/1,
         close/1,
-        socket/4, socket/5,
+        socket/4,
         proplist_to_record/1,
         probe/5,
         response/1
@@ -67,7 +67,6 @@
         ttl = 1,
         max_hops = 31,
         timeout = 1000,         % 1 second
-        setuid = true,
 
         packet,
         handler,
@@ -229,8 +228,7 @@ init([Pid, Options]) ->
         family = Family,
         protocol = Protocol,
         saddr = Saddr,
-        sport = Sport,
-        setuid = Setuid
+        sport = Sport
     } = State,
 
     % Read socket: ICMP trace
@@ -241,8 +239,7 @@ init([Pid, Options]) ->
         Family,
         Protocol,
         Saddr,
-        Sport,
-        Setuid
+        Sport
     ),
 
     {ok, State#state{
@@ -312,45 +309,52 @@ code_change(_OldVsn, State, _Extra) ->
 %%-------------------------------------------------------------------------
 %%% Utility Functions
 %%-------------------------------------------------------------------------
-socket(Family, Protocol, Saddr, Sport) ->
-    socket(Family, Protocol, Saddr, Sport, true).
-
-socket(Family, Protocol0, Saddr, Sport, Setuid) ->
+socket(Family, Protocol0, Saddr, Sport) ->
     {Protocol, Type, Port} = case {Family, Protocol0} of
         {inet, icmp} -> {icmp, raw, 0};
         {inet6, icmp} -> {'ipv6-icmp', raw, 0};
-        {_, udp} -> {udp, dgram, Sport};
-        _ -> {raw, raw, 0}
-    end,
-    socket_1(Family, Type, Protocol, Saddr, Port, Setuid).
-
-socket_1(Family, Type, Protocol, Saddr, Sport, true) ->
-    procket:open(Sport, [
-        {ip, Saddr},
-        {family, Family},
-        {type, Type},
-        {protocol, Protocol}
-    ]);
-socket_1(Family, Type, Protocol, _Saddr, 0, false) ->
-    procket:socket(Family, Type, Protocol);
-socket_1(Family, Type, Protocol, {SA1,SA2,SA3,SA4}, Sport, false) ->
-    PF_INET = case Family of
-        inet -> ?PF_INET;
-        inet6 -> ?PF_INET6
+        {_, udp} -> {udp, dgram, Sport}
     end,
 
+    open_socket(Family, Type, Protocol, Saddr, Port).
+
+open_socket(Family, Type, Protocol, Saddr, Sport) ->
     case procket:socket(Family, Type, Protocol) of
+        {error, eperm} ->
+            procket:open(Sport, [
+                {ip, Saddr},
+                {family, Family},
+                {type, Type},
+                {protocol, Protocol}
+            ]);
         {ok, Socket} ->
-            Sockaddr = <<
-                (procket:sockaddr_common(PF_INET, 16))/binary,
-                Sport:16,           % Source port
-                SA1,SA2,SA3,SA4,    % IPv4 address
-                0:64
-            >>,
-            ok = procket:bind(Socket, Sockaddr),
-            {ok, Socket};
+            bind_socket(Socket, Family, Saddr, Sport);
         Error ->
             Error
+    end.
+
+bind_socket(Socket, inet, {SA1,SA2,SA3,SA4}, Sport) ->
+    Sockaddr = <<(procket:sockaddr_common(?PF_INET, 16))/binary,
+        Sport:16,           % Source port
+        SA1,SA2,SA3,SA4,    % IPv4 address
+        0:64>>,
+
+    case procket:bind(Socket, Sockaddr) of
+        ok -> {ok, Socket};
+        Error -> Error
+    end;
+bind_socket(Socket, inet6, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8}, Sport) ->
+    Sockaddr = <<(procket:sockaddr_common(?PF_INET6, 16))/binary,
+        Sport:16,                       % Source port
+        0:32,                           % IPv6 flow information
+        SA1:16,SA2:16,SA3:16,SA4:16,    % IPv6 address
+        SA5:16,SA6:16,SA7:16,SA8:16,
+        0:32                            % IPv6 scope id
+        >>,
+
+    case procket:bind(Socket, Sockaddr) of
+        ok -> {ok, Socket};
+        Error -> Error
     end.
 
 proplist_to_record(Options) ->
@@ -367,7 +371,6 @@ proplist_to_record(Options) ->
     Initial_ttl = proplists:get_value(ttl, Options, Default#state.ttl),
     Max_hops = proplists:get_value(max_hops, Options, Default#state.max_hops),
     Timeout = proplists:get_value(timeout, Options, Default#state.timeout),
-    Setuid = proplists:get_value(setuid, Options, Default#state.setuid),
 
     Saddr = proplists:get_value(saddr, Options, Saddr),
     Sport = proplists:get_value(sport, Options, crypto:rand_uniform(16#8000, 16#FFFF)),
@@ -386,7 +389,6 @@ proplist_to_record(Options) ->
         ttl = Initial_ttl,
         max_hops = Max_hops,
         timeout = Timeout,
-        setuid = Setuid,
         saddr = Saddr,
         sport = Sport,
 
