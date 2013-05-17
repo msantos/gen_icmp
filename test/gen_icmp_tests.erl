@@ -76,6 +76,15 @@ reuse_socket_test() ->
 
     ok = gen_icmp:close(Socket).
 
+% Set the socket TTL
+ipv4_set_ttl() ->
+    [{error,timxceed_intrans,"www.google.com",
+     {_,_,_,_},
+     {_,_,_,_},
+     {_,_,TTL,_},
+     _}] = gen_icmp:ping("www.google.com", [{ttl, 1}]),
+    true = TTL > 0.
+
 ipv6_single_host_ok_test() ->
     [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_},{_,_,_,_,_,_,_,_}, {_,0,_,_},
      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("ipv6.google.com", [inet6]).

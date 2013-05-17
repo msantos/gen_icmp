@@ -260,7 +260,7 @@ handle_call({send, {DA1,DA2,DA3,DA4}, Dport, TTL, Packet},
         DA1,DA2,DA3,DA4,            % IPv4 address
         0:64
     >>,
-    ok = procket:setsockopt(Socket, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>),
+    ok = gen_icmp:set_ttl(Socket, inet, TTL),
     {reply, procket:sendto(Socket, Packet, 0, Sockaddr), State};
 handle_call({send, {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8}, Dport, TTL, Packet},
             _From, #state{ws = Socket} = State) ->
@@ -272,7 +272,7 @@ handle_call({send, {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8}, Dport, TTL, Packet},
          DA5:16,DA6:16,DA7:16,DA8:16,
         0:32                                % Scope ID
     >>,
-    ok = procket:setsockopt(Socket, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<TTL:32/native>>),
+    ok = gen_icmp:set_ttl(Socket, inet6, TTL),
     {reply, procket:sendto(Socket, Packet, 0, Sockaddr), State};
 handle_call({handler, _Handler}, _From, State) ->
     {reply, ok, State};
@@ -438,19 +438,6 @@ next_port(udp) ->
     fun(N) -> N+1 end;
 next_port(_) ->
     fun(N) -> N end.
-
-ip_ttl() ->
-    case os:type() of
-        {unix, linux} -> 2;
-        {unix, _} -> 4
-    end.
-
-
-ipv6_unicast_hops() ->
-    case os:type() of
-        {unix, linux} -> 16;
-        {unix, _} -> 4
-    end.
 
 
 flush_events(Ref) ->

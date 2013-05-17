@@ -43,7 +43,8 @@
     send/3,
     controlling_process/2,
     setopts/2,
-    family/1
+    family/1,
+    set_ttl/3
     ]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/3]).
@@ -194,9 +195,17 @@ init([Pid, RawOpts, SockOpts]) ->
             N
     end,
 
-    init_1(Pid, Family, SockOpts, Result).
+    init_1(Pid, Family, RawOpts, SockOpts, Result).
 
-init_1(Pid, Family, SockOpts, {ok, FD}) ->
+init_1(Pid, Family, RawOpts, SockOpts, {ok, FD}) ->
+    TTL = proplists:get_value(ttl, RawOpts),
+    error_logger:info_report([{ttl, TTL}]),
+
+    case TTL of
+        undefined -> ok;
+        _ -> set_ttl(FD, Family, TTL)
+    end,
+
     case gen_udp:open(0, SockOpts ++ [binary, {fd, FD}, Family]) of
         {ok, Socket} ->
             {ok, #state{
@@ -208,7 +217,7 @@ init_1(Pid, Family, SockOpts, {ok, FD}) ->
         Error ->
             Error
     end;
-init_1(_Pid, _Family, _SockOpts, Error) ->
+init_1(_Pid, _Family, _RawOpts, _SockOpts, Error) ->
     {stop, Error}.
 
 handle_call(close, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
@@ -414,6 +423,11 @@ payload(echo) ->
     {Mega,Sec,USec} = erlang:now(),
     <<Mega:32,Sec:32,USec:32, (list_to_binary(lists:seq($\s, $K)))/binary>>.
 
+% Set the TTL on a socket
+set_ttl(FD, inet, TTL) ->
+    procket:setsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>);
+set_ttl(FD, inet6, TTL) ->
+    procket:setsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<TTL:32/native>>).
 
 %%-------------------------------------------------------------------------
 %%% Internal Functions
@@ -561,6 +575,18 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Timeouts, Acc}
     end.
 
+% TTL
+ip_ttl() ->
+    case os:type() of
+        {unix, linux} -> 2;
+        {unix, _} -> 4
+    end.
+
+ipv6_unicast_hops() ->
+    case os:type() of
+        {unix, linux} -> 16;
+        {unix, _} -> 4
+    end.
 
 flush_events(Ref) ->
     receive
