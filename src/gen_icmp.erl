@@ -43,7 +43,10 @@
     send/3,
     controlling_process/2,
     setopts/2,
-    family/1
+    family/1,
+    getfd/1,
+    set_ttl/3,
+    get_ttl/2
     ]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/3]).
@@ -61,7 +64,7 @@
 -record(state, {
         family = inet,  % Protocol family (inet, inet6)
         pid,            % caller PID
-        raw,            % raw socket
+        fd,             % socket file descriptor
         s               % udp socket
 }).
 
@@ -111,6 +114,9 @@ setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
 
 family(Ref) when is_pid(Ref) ->
     gen_server:call(Ref, family, infinity).
+
+getfd(Ref) when is_pid(Ref) ->
+    gen_server:call(Ref, getfd, infinity).
 
 ping(Host) ->
     ping(Host, []).
@@ -187,28 +193,35 @@ init([Pid, RawOpts, SockOpts]) ->
         true -> {'ipv6-icmp', inet6}
     end,
 
-    Result = case proplists:get_value(setuid, RawOpts, true) of
-        true ->
+    Result = case procket:socket(Family, raw, Protocol) of
+        {error, eperm} ->
             procket:open(0, RawOpts ++ [{protocol, Protocol}, {type, raw}, {family, Family}]);
-        false ->
-            procket:socket(Family, raw, Protocol)
+        N ->
+            N
     end,
 
-    init_1(Pid, Family, SockOpts, Result).
+    init_1(Pid, Family, RawOpts, SockOpts, Result).
 
-init_1(Pid, Family, SockOpts, {ok, FD}) ->
+init_1(Pid, Family, RawOpts, SockOpts, {ok, FD}) ->
+    TTL = proplists:get_value(ttl, RawOpts),
+
+    case TTL of
+        undefined -> ok;
+        _ -> set_ttl(FD, Family, TTL)
+    end,
+
     case gen_udp:open(0, SockOpts ++ [binary, {fd, FD}, Family]) of
         {ok, Socket} ->
             {ok, #state{
                 family = Family,
                 pid = Pid,
-                raw = FD,
+                fd = FD,
                 s = Socket
             }};
         Error ->
             Error
     end;
-init_1(_Pid, _Family, _SockOpts, Error) ->
+init_1(_Pid, _Family, _RawOpts, _SockOpts, Error) ->
     {stop, Error}.
 
 handle_call(close, {Pid,_}, #state{pid = Pid, s = Socket} = State) ->
@@ -227,6 +240,8 @@ handle_call({setopts, Options}, {Pid,_}, #state{pid = Pid, s = Socket} = State) 
     {reply, inet:setopts(Socket, Options), State};
 handle_call(family, _From, #state{family = Family} = State) ->
     {reply, Family, State};
+handle_call(getfd, _From, #state{fd = Socket} = State) ->
+    {reply, Socket, State};
 
 handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
@@ -240,10 +255,10 @@ handle_cast(Msg, State) ->
 % IPv4 ICMP
 handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
         <<4:4, HL:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
-          _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
+          _Off:13, TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
           _SA1:8, _SA2:8, _SA3:8, _SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
-          Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
+          Data/binary>>}, #state{pid = Pid, fd = FD, s = Socket} = State) ->
 
     N = (HL-5)*4,
     Opt = if
@@ -252,20 +267,21 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
     end,
 
     <<_:Opt/bits, Payload/bits>> = Data,
-    Pid ! {icmp, self(), Saddr, Payload},
+    Pid ! {icmp, self(), Saddr, TTL, Payload},
     {noreply, State};
 
 % IPv6 ICMP
 handle_info({udp, Socket, {_,_,_,_,_,_,_,_} = Saddr, 0, Data},
-            #state{pid = Pid, s = Socket} = State) ->
-    Pid ! {icmp, self(), Saddr, Data},
+            #state{pid = Pid, fd = FD, s = Socket} = State) ->
+    {ok, TTL} = get_ttl(FD, inet6),
+    Pid ! {icmp, self(), Saddr, TTL, Data},
     {noreply, State};
 
 handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
 
-terminate(_Reason, #state{raw = Socket}) ->
+terminate(_Reason, #state{fd = Socket}) ->
     procket:close(Socket),
     ok.
 
@@ -414,6 +430,23 @@ payload(echo) ->
     {Mega,Sec,USec} = erlang:now(),
     <<Mega:32,Sec:32,USec:32, (list_to_binary(lists:seq($\s, $K)))/binary>>.
 
+% Set the TTL on a socket
+set_ttl(FD, inet, TTL) ->
+    procket:setsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>);
+set_ttl(FD, inet6, TTL) ->
+    procket:setsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<TTL:32/native>>).
+
+% Get the socket TTL
+get_ttl(FD, inet) ->
+    case procket:getsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<0:32>>) of
+        {ok, <<TTL:32/native>>} -> {ok, TTL};
+        Error -> Error
+    end;
+get_ttl(FD, inet6) ->
+    case procket:getsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<0:32>>) of
+        {ok, <<TTL:32/native>>} -> {ok, TTL};
+        Error -> Error
+    end.
 
 %%-------------------------------------------------------------------------
 %%% Internal Functions
@@ -482,7 +515,7 @@ ping_loop(Hosts, Acc, #ping_opt{
     receive
 
         % IPv4 ICMP Echo Reply
-        {icmp, Socket, {_,_,_,_} = Reply,
+        {icmp, Socket, {_,_,_,_} = Reply, TTL,
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -493,14 +526,14 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, Address, Seq}, NHosts} ->
-                    {NHosts, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc]};
+                    {NHosts, [{ok, Addr, Address, Reply, {Id, Seq, TTL, Elapsed}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
             ping_loop(Hosts2, Result, Opt);
 
         % IPv4 ICMP Error
-        {icmp, Socket, {_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp, Socket, {_,_,_,_} = Reply, TTL, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                                             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
                                             _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
                                             _SA1:8, _SA2:8, _SA3:8, _SA4:8,
@@ -511,14 +544,14 @@ ping_loop(Hosts, Acc, #ping_opt{
             DA = {DA1,DA2,DA3,DA4},
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, DA, Seq}, NHosts} ->
-                    {NHosts, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc]};
+                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, {Id, Seq, TTL, undefined}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
             ping_loop(Hosts2, Result, Opt);
 
         % IPv6 ICMP Echo Reply
-        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply,
+        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, TTL,
             <<?ICMP6_ECHO_REPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -529,26 +562,26 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, Address, Seq}, NHosts} ->
-                    {NHosts, [{ok, Addr, Address, Reply, {{Id, Seq, Elapsed}, Payload}}|Acc]};
+                    {NHosts, [{ok, Addr, Address, Reply, {Id, Seq, TTL, Elapsed}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
             ping_loop(Hosts2, Result, Opt);
 
         % IPv6 ICMP Error
-        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, TTL, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                     6:4, _Class:8, _Flow:20,
                     _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
                     _SA1:16, _SA2:16, _SA3:16, _SA4:16, _SA5:16, _SA6:16, _SA7:16, _SA8:16,
                     DA1:16, DA2:16, DA3:16, DA4:16, DA5:16, DA6:16, DA7:16, DA8:16,
-                    ?ICMP6_ECHO_REPLY:8, 0:8, _Checksum2:16, Id:16, Seq:16,
+                    ?ICMP6_ECHO_REQUEST:8, 0:8, _Checksum2:16, Id:16, Seq:16,
                     _/binary>> = Data} ->
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8},
             {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, DA, Seq}, NHosts} ->
-                    {NHosts, [{{error, icmp_message:code({Type, Code})}, Addr, DA, Reply, {{Id, Seq}, Payload}}|Acc]};
+                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, {Id, Seq, TTL, undefined}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
@@ -557,14 +590,26 @@ ping_loop(Hosts, Acc, #ping_opt{
         % IPv4/IPv6 timeout on socket
         {icmp, Socket, timeout} ->
             erlang:cancel_timer(TRef),
-            Timeouts = [ {{error, timeout}, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts ],
+            Timeouts = [ {error, timeout, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts ],
             {Timeouts, Acc}
     end.
 
+% TTL
+ip_ttl() ->
+    case os:type() of
+        {unix, linux} -> 2;
+        {unix, _} -> 4
+    end.
+
+ipv6_unicast_hops() ->
+    case os:type() of
+        {unix, linux} -> 16;
+        {unix, _} -> 4
+    end.
 
 flush_events(Ref) ->
     receive
-        {icmp, Ref, _Addr, _Data} ->
+        {icmp, Ref, _Addr, _TTL, _Data} ->
             flush_events(Ref)
     after
         0 -> ok
