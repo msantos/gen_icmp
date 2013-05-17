@@ -199,7 +199,6 @@ init([Pid, RawOpts, SockOpts]) ->
 
 init_1(Pid, Family, RawOpts, SockOpts, {ok, FD}) ->
     TTL = proplists:get_value(ttl, RawOpts),
-    error_logger:info_report([{ttl, TTL}]),
 
     case TTL of
         undefined -> ok;
@@ -555,7 +554,7 @@ ping_loop(Hosts, Acc, #ping_opt{
                     _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
                     _SA1:16, _SA2:16, _SA3:16, _SA4:16, _SA5:16, _SA6:16, _SA7:16, _SA8:16,
                     DA1:16, DA2:16, DA3:16, DA4:16, DA5:16, DA6:16, DA7:16, DA8:16,
-                    ?ICMP6_ECHO_REPLY:8, 0:8, _Checksum2:16, Id:16, Seq:16,
+                    ?ICMP6_ECHO_REQUEST:8, 0:8, _Checksum2:16, Id:16, Seq:16,
                     _/binary>> = Data} ->
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8},

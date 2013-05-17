@@ -77,7 +77,7 @@ reuse_socket_test() ->
     ok = gen_icmp:close(Socket).
 
 % Set the socket TTL
-ipv4_set_ttl() ->
+ipv4_set_ttl_test() ->
     [{error,timxceed_intrans,"www.google.com",
      {_,_,_,_},
      {_,_,_,_},
@@ -107,3 +107,11 @@ ipv6_different_request_reply_addresses() ->
      {0,0,0,0,0,0,0,1},
      {_,0,_,_},
       <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("::", [inet6]).
+
+% Set the socket TTL
+ipv6_set_ttl_test() ->
+    [{error,unreach_net,"www.google.com",
+     {_,_,_,_,_,_,_,_},
+     {_,_,_,_,_,_,_,_},
+     {_,_,_,_},
+     _}] = gen_icmp:ping("www.google.com", [inet6, {ttl,1}]).
