@@ -43,7 +43,7 @@ version. If you just need a simple example of sending a ping, also see:
 
         Messages sent to the controlling process are:
 
-        {icmp, Socket, Address, Packet}
+        {icmp, Socket, Address, TTL, Packet}
 
         Where Socket is the pid of the gen_icmp process, Address is a tuple
         representing the IPv4 source address and Packet is the complete
@@ -108,16 +108,17 @@ version. If you just need a simple example of sending a ping, also see:
                 Hosts = [ tuple() | string() ]
                 Options = [ Option ]
                 Option = {id, Id} | {sequence, Sequence} | {timeout, Timeout} | {data, Data} |
-                    {timestamp, boolean()} | inet | inet6
+                    {timestamp, boolean()} | {ttl, TTL} | inet | inet6
                 Id = uint16()
                 Sequence = uint16()
                 Timeout = int()
+                TTL = uint8()
                 Data = binary()
                 Responses = [ Response ]
                 Response = {ok, Host, Address, ReplyAddr, Details, Payload}
                     | {error, Error, Host, Address, ReplyAddr, Details, Payload}
                     | {error, timeout, Host, Address}
-                Details = {Id, Sequence, Elapsed}
+                Details = {Id, Sequence, TTL, Elapsed}
                 Elapsed = int() | undefined
                 Payload = binary()
                 Error = unreach_host | timxceed_intrans

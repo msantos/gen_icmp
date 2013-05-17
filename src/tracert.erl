@@ -285,7 +285,7 @@ handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
-handle_info({icmp, Socket, Daddr, Data}, #state{pid = Pid, rs = Socket,
+handle_info({icmp, Socket, Daddr, _TTL, Data}, #state{pid = Pid, rs = Socket,
         protocol = Protocol} = State) ->
     Pid ! {icmp, self(), Daddr, {Protocol, Data}},
     {noreply, State};

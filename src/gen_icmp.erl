@@ -240,7 +240,7 @@ handle_cast(Msg, State) ->
 % IPv4 ICMP
 handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
         <<4:4, HL:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
-          _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
+          _Off:13, TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
           _SA1:8, _SA2:8, _SA3:8, _SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
           Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
@@ -252,13 +252,13 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
     end,
 
     <<_:Opt/bits, Payload/bits>> = Data,
-    Pid ! {icmp, self(), Saddr, Payload},
+    Pid ! {icmp, self(), Saddr, TTL, Payload},
     {noreply, State};
 
 % IPv6 ICMP
 handle_info({udp, Socket, {_,_,_,_,_,_,_,_} = Saddr, 0, Data},
             #state{pid = Pid, s = Socket} = State) ->
-    Pid ! {icmp, self(), Saddr, Data},
+    Pid ! {icmp, self(), Saddr, undefined, Data},
     {noreply, State};
 
 handle_info(Info, State) ->
@@ -482,7 +482,7 @@ ping_loop(Hosts, Acc, #ping_opt{
     receive
 
         % IPv4 ICMP Echo Reply
-        {icmp, Socket, {_,_,_,_} = Reply,
+        {icmp, Socket, {_,_,_,_} = Reply, TTL,
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -493,14 +493,14 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, Address, Seq}, NHosts} ->
-                    {NHosts, [{ok, Addr, Address, Reply, {Id, Seq, Elapsed}, Payload}|Acc]};
+                    {NHosts, [{ok, Addr, Address, Reply, {Id, Seq, TTL, Elapsed}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
             ping_loop(Hosts2, Result, Opt);
 
         % IPv4 ICMP Error
-        {icmp, Socket, {_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp, Socket, {_,_,_,_} = Reply, TTL, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                                             4:4, 5:4, _ToS:8, _Len:16, _Id:16, 0:1, _DF:1, _MF:1,
                                             _Off:13, _TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
                                             _SA1:8, _SA2:8, _SA3:8, _SA4:8,
@@ -511,14 +511,14 @@ ping_loop(Hosts, Acc, #ping_opt{
             DA = {DA1,DA2,DA3,DA4},
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, DA, Seq}, NHosts} ->
-                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, {Id, Seq, undefined}, Payload}|Acc]};
+                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, {Id, Seq, TTL, undefined}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
             ping_loop(Hosts2, Result, Opt);
 
         % IPv6 ICMP Echo Reply
-        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply,
+        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, TTL,
             <<?ICMP6_ECHO_REPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
@@ -529,14 +529,14 @@ ping_loop(Hosts, Acc, #ping_opt{
             end,
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, Address, Seq}, NHosts} ->
-                    {NHosts, [{ok, Addr, Address, Reply, {Id, Seq, Elapsed}, Payload}|Acc]};
+                    {NHosts, [{ok, Addr, Address, Reply, {Id, Seq, TTL, Elapsed}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
             ping_loop(Hosts2, Result, Opt);
 
         % IPv6 ICMP Error
-        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
+        {icmp, Socket, {_,_,_,_,_,_,_,_} = Reply, TTL, <<Type:8, Code:8, _Checksum1:16, _Unused:32,
                     6:4, _Class:8, _Flow:20,
                     _Len:16, ?IPPROTO_ICMPV6:8, _Hop:8,
                     _SA1:16, _SA2:16, _SA3:16, _SA4:16, _SA5:16, _SA6:16, _SA7:16, _SA8:16,
@@ -548,7 +548,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
             {Hosts2, Result} = case lists:keytake(Seq, 4, Hosts) of
                 {value, {ok, Addr, DA, Seq}, NHosts} ->
-                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, {Id, Seq, undefined}, Payload}|Acc]};
+                    {NHosts, [{error, icmp_message:code({Type, Code}), Addr, DA, Reply, {Id, Seq, TTL, undefined}, Payload}|Acc]};
                 false ->
                     {Hosts, Acc}
             end,
@@ -564,7 +564,7 @@ ping_loop(Hosts, Acc, #ping_opt{
 
 flush_events(Ref) ->
     receive
-        {icmp, Ref, _Addr, _Data} ->
+        {icmp, Ref, _Addr, _TTL, _Data} ->
             flush_events(Ref)
     after
         0 -> ok
