@@ -44,7 +44,9 @@
     controlling_process/2,
     setopts/2,
     family/1,
-    set_ttl/3
+    getfd/1,
+    set_ttl/3,
+    get_ttl/2
     ]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/3]).
@@ -62,7 +64,7 @@
 -record(state, {
         family = inet,  % Protocol family (inet, inet6)
         pid,            % caller PID
-        raw,            % raw socket
+        fd,             % socket file descriptor
         s               % udp socket
 }).
 
@@ -112,6 +114,9 @@ setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
 
 family(Ref) when is_pid(Ref) ->
     gen_server:call(Ref, family, infinity).
+
+getfd(Ref) when is_pid(Ref) ->
+    gen_server:call(Ref, getfd, infinity).
 
 ping(Host) ->
     ping(Host, []).
@@ -210,7 +215,7 @@ init_1(Pid, Family, RawOpts, SockOpts, {ok, FD}) ->
             {ok, #state{
                 family = Family,
                 pid = Pid,
-                raw = FD,
+                fd = FD,
                 s = Socket
             }};
         Error ->
@@ -235,6 +240,8 @@ handle_call({setopts, Options}, {Pid,_}, #state{pid = Pid, s = Socket} = State) 
     {reply, inet:setopts(Socket, Options), State};
 handle_call(family, _From, #state{family = Family} = State) ->
     {reply, Family, State};
+handle_call(getfd, _From, #state{fd = Socket} = State) ->
+    {reply, Socket, State};
 
 handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
@@ -251,7 +258,7 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
           _Off:13, TTL:8, ?IPPROTO_ICMP:8, _Sum:16,
           _SA1:8, _SA2:8, _SA3:8, _SA4:8,
           _DA1:8, _DA2:8, _DA3:8, _DA4:8,
-          Data/binary>>}, #state{pid = Pid, s = Socket} = State) ->
+          Data/binary>>}, #state{pid = Pid, fd = FD, s = Socket} = State) ->
 
     N = (HL-5)*4,
     Opt = if
@@ -265,15 +272,16 @@ handle_info({udp, Socket, {_,_,_,_} = Saddr, 0,
 
 % IPv6 ICMP
 handle_info({udp, Socket, {_,_,_,_,_,_,_,_} = Saddr, 0, Data},
-            #state{pid = Pid, s = Socket} = State) ->
-    Pid ! {icmp, self(), Saddr, undefined, Data},
+            #state{pid = Pid, fd = FD, s = Socket} = State) ->
+    {ok, TTL} = get_ttl(FD, inet6),
+    Pid ! {icmp, self(), Saddr, TTL, Data},
     {noreply, State};
 
 handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
 
-terminate(_Reason, #state{raw = Socket}) ->
+terminate(_Reason, #state{fd = Socket}) ->
     procket:close(Socket),
     ok.
 
@@ -427,6 +435,18 @@ set_ttl(FD, inet, TTL) ->
     procket:setsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>);
 set_ttl(FD, inet6, TTL) ->
     procket:setsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<TTL:32/native>>).
+
+% Get the socket TTL
+get_ttl(FD, inet) ->
+    case procket:getsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<0:32>>) of
+        {ok, <<TTL:32/native>>} -> {ok, TTL};
+        Error -> Error
+    end;
+get_ttl(FD, inet6) ->
+    case procket:getsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<0:32>>) of
+        {ok, <<TTL:32/native>>} -> {ok, TTL};
+        Error -> Error
+    end.
 
 %%-------------------------------------------------------------------------
 %%% Internal Functions
