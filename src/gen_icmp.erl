@@ -132,6 +132,8 @@ ping(Hosts, Options) ->
     Res.
 
 ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Options) ->
+    ok = setopts(Socket, [{active,true}]),
+
     Family = family(Socket),
 
     Id = proplists:get_value(id, Options, erlang:phash2(self(), 16#FFFF)),
@@ -155,6 +157,8 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
 
     case Addresses of
         [] ->
+            ok = setopts(Socket, [{active,false}]),
+            flush_events(Socket),
             Errors;
         _ ->
             [ spawn(fun() ->
@@ -166,6 +170,7 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
                                              timeout = Timeout,
                                              timestamp = Timestamp
                                             }),
+            ok = setopts(Socket, [{active,false}]),
             flush_events(Socket),
             Errors ++ Timeouts ++ Replies
     end.
@@ -202,12 +207,17 @@ init([Pid, RawOpts, SockOpts]) ->
 
     init_1(Pid, Family, RawOpts, SockOpts, Result).
 
-init_1(Pid, Family, RawOpts, SockOpts, {ok, FD}) ->
+init_1(Pid, Family, RawOpts, SockOpts0, {ok, FD}) ->
     TTL = proplists:get_value(ttl, RawOpts),
 
     case TTL of
         undefined -> ok;
         _ -> set_ttl(FD, Family, TTL)
+    end,
+
+    SockOpts = case proplists:is_defined(active, SockOpts0) of
+        true -> SockOpts0;
+        false -> SockOpts0 ++ [{active, false}]
     end,
 
     case gen_udp:open(0, SockOpts ++ [binary, {fd, FD}, Family]) of

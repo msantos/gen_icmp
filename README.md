@@ -26,6 +26,10 @@ version. If you just need a simple example of sending a ping, also see:
                 SocketOpt = [ {active, true} | {active, once} |
                     {active, false} | inet | inet6 ]
 
+        By default, the ICMP socket is opened in {active,false} mode. No
+        packets will be received by the socket. setopts/2 can be used
+        to place the socket in {active,true} mode.
+
         See the procket README for the raw socket options and for
         instructions on setting up the setuid helper.
 
@@ -45,9 +49,19 @@ version. If you just need a simple example of sending a ping, also see:
 
         {icmp, Socket, Address, TTL, Packet}
 
-        Where Socket is the pid of the gen_icmp process, Address is a tuple
-        representing the IPv4 source address and Packet is the complete
-        ICMP packet including the ICMP headers.
+        Where:
+
+            * Socket is the pid of the gen_icmp process
+
+            * Address is a tuple representing the IPv4 or IPv6 source address
+
+            * TTL is the IP TTL
+                * IPv4: TTL take from the IP header
+                * IPv6: the socket's hop limit returned from
+                  getsockopt(IPV6_UNICAST_HOPS) (this is not the packet's
+                  TTL, it is the socket's max TTL)
+
+            * Packet is the complete ICMP packet including the ICMP headers
 
     close(Socket) -> ok | {error, Reason}
 
@@ -97,6 +111,14 @@ version. If you just need a simple example of sending a ping, also see:
         For options, see the inet man page. Simply calls inet:setopts/2
         on the gen_udp socket.
 
+        setopts/2 can be used to toggle the socket between passive and
+        active mode:
+
+            {ok, Socket} = gen_icmp:open(), % socket is {active,false}
+            ok = gen_icmp:setopts(Socket, [{active, true}]),
+            % do stuff with the socket
+            ok = gen_icmp:setopts(Socket, [{active, false}]).
+
     ping(Host) -> Responses
     ping(Host, Options) -> Responses
     ping(Socket, Hosts, Options) -> Responses
@@ -126,6 +148,10 @@ version. If you just need a simple example of sending a ping, also see:
         ping/1 is a convenience function to send a single ping
         packet. The argument to ping/1 can be either a hostname or a
         list of hostnames.
+
+        To prevent the process mailbox from being flooded with ICMP
+        messages, ping/3 will put the socket into {active,false} mode
+        after completing.
 
         The ping/3 function blocks until either an ICMP ECHO REPLY is
         received from all hosts or Timeout is reached.
@@ -340,15 +366,22 @@ Keeping the ICMP socket around between runs is more efficient:
     P2 = gen_icmp:ping(Socket, [{10,2,2,2}, "www.yahoo.com"], []),
     gen_icmp:close(Socket).
 
+
 ### Working with ICMP sockets
 
     {ok, Socket} = gen_icmp:open().
+
+    % By default, the ICMP socket is in passive mode
+    ok = gen_icmp:setopts(Socket, [{active, true}]),
 
     % ICMP host unreachable, empty payload (should contain an IPv4 header
     % and the first 8 bytes of the packet data)
     Packet = gen_icmp:packet([{type, 3}, {code, 0}], <<0:160, 0:64>>).
 
-    gen_icmp:send(Socket, {127,0,0,1}, Packet).
+    gen_icmp:send(Socket, {127,0,0,1}, Packet),
+
+    % Put the socket back into passive mode
+    ok = gen_icmp:setopts(Socket, [{active, false}]).
 
 
 ### Setting Up an ICMP Ping Tunnel
@@ -408,3 +441,5 @@ To use the proxy on host1:
 * handle rfc 4884 (Extended ICMP to Support Multi-Part Messages)
 
 * handle ICMP router renumbering messages
+
+* IPv6: retrieve the packet TTL rather than using the IPV6\_UNICAST\_HOPS

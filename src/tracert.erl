@@ -232,7 +232,7 @@ init([Pid, Options]) ->
     } = State,
 
     % Read socket: ICMP trace
-    {ok, RS} = gen_icmp:open([Family]),
+    {ok, RS} = gen_icmp:open([Family], [{active, true}]),
 
     % Write socket: probes
     {ok, WS} = socket(
