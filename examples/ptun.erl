@@ -123,8 +123,8 @@ proxy(#state{
         % ICMP socket events
         % client: open a connection on receiving the first ICMP ping
         {icmp, IS, Addr, _TTL,
-            <<?ICMP_ECHO:8, 0:8, _Checksum:16, _Id:16, Seq:16, _Data/binary>>}
-            when TS == undefined, Seq == 0 ->
+            <<?ICMP_ECHO:8, 0:8, _Checksum:16, _Id:16, 0:16, _Data/binary>>}
+            when TS == undefined ->
             {ok, Socket} = gen_tcp:connect("127.0.0.1", Port, [binary, {packet, 0}]),
             proxy(State#state{ts = Socket});
         {icmp, IS, Addr, _TTL,
