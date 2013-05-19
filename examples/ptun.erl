@@ -54,7 +54,6 @@
 -export([client/2, server/2]).
 
 -define(TIMEOUT, 5000).
--define(PORT, 8787).
 
 -record(state, {
         addr,
@@ -160,7 +159,7 @@ reply(Socket, Addr, Id, Seq) ->
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, _/binary>>} ->
                 ok
     after
-        5000 ->
+        ?TIMEOUT ->
             error_logger:info_report([{reply, Id, Seq}]),
             ok
     end.
