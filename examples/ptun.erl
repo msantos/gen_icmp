@@ -129,7 +129,7 @@ proxy(#state{
             {ok, Socket} = gen_tcp:connect("127.0.0.1", Port, [binary, {packet, 0}]),
             proxy(State#state{ts = Socket});
         {icmp, IS, Addr, _TTL,
-            <<?ICMP_ECHO:8, 0:8, _Checksum:16, _Id:16, _Seq:16, Len:16, Data/binary>>} ->
+            <<?ICMP_ECHO:8, 0:8, _Checksum:16, _Id:16, _Seq:16, Len:8, Data/binary>>} ->
             <<Data1:Len/bytes, _/binary>> = Data,
             ok = gen_tcp:send(TS, Data1),
             proxy(State#state{ts = TS});
@@ -141,16 +141,16 @@ proxy(#state{
     end.
 
 % To keep it simple, we use 64 byte packets
-% 4 bytes header, 2 bytes type, 2 bytes code, 2 bytes data length, 54 bytes data
-send(<<Data:42/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, seq = Seq} = State) ->
+% 4 bytes header, 2 bytes type, 2 bytes code, 1 byte data length, 55 bytes data
+send(<<Data:43/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, seq = Seq} = State) ->
     ok = gen_icmp:send(Socket, Addr,
-        gen_icmp:echo(inet, Id, Seq, <<(byte_size(Data)):16, Data/bytes>>)),
+        gen_icmp:echo(inet, Id, Seq, <<(byte_size(Data)):8, Data/bytes>>)),
     reply(Socket, Addr, Id, Seq),
     send(Rest, State#state{seq = Seq + 1});
 send(Data, #state{is = Socket, addr = Addr, id = Id, seq = Seq}) ->
     Len = byte_size(Data),
     ok = gen_icmp:send(Socket, Addr,
-        gen_icmp:echo(inet, Id, Seq, <<Len:16, Data/bytes, 0:((42-Len)*8)>>)),
+        gen_icmp:echo(inet, Id, Seq, <<Len:8, Data/bytes, 0:((43-Len)*8)>>)),
     reply(Socket, Addr, Id, Seq),
     Seq+1.
 
