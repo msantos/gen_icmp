@@ -96,7 +96,7 @@ accept(Addr, ICMP, Listen) ->
         ts = Socket,
         id = crypto:rand_uniform(0, 16#FFFF)
     },
-    [{ok, Addr, _, _}] = gen_icmp:ping(ICMP, [Addr], [
+    [{ok, Addr, _Resolved, _ReplyAddr, _, _}] = gen_icmp:ping(ICMP, [Addr], [
             {id, State#state.id},
             {sequence, 0},
             {timeout, ?TIMEOUT}
@@ -109,52 +109,58 @@ proxy(#state{
         addr = Addr,
         port = Port
     } = State) ->
+    ok = gen_icmp:setopts(IS, [{active, true}]),
     receive
         % TCP socket events
         {tcp, TS, Data} ->
             Seq = send(Data, State),
             proxy(State#state{seq = Seq});
         {tcp_closed, TS} ->
+            error_logger:info_report([{tcp, closed}]),
             ok;
         {tcp_error, TS, Error} ->
             {error, Error};
 
         % ICMP socket events
         % client: open a connection on receiving the first ICMP ping
-        {icmp, IS, Addr,
+        {icmp, IS, Addr, _TTL,
             <<?ICMP_ECHO:8, 0:8, _Checksum:16, _Id:16, Seq:16, _Data/binary>>}
             when TS == undefined, Seq == 0 ->
             {ok, Socket} = gen_tcp:connect("127.0.0.1", Port, [binary, {packet, 0}]),
-            error_logger:info_report([{connect, {{127,0,0,1},Port}}]),
             proxy(State#state{ts = Socket});
-        {icmp, IS, Addr,
+        {icmp, IS, Addr, _TTL,
             <<?ICMP_ECHO:8, 0:8, _Checksum:16, _Id:16, _Seq:16, Len:16, Data/binary>>} ->
             <<Data1:Len/bytes, _/binary>> = Data,
             ok = gen_tcp:send(TS, Data1),
             proxy(State#state{ts = TS});
-        {icmp, IS, Addr, Packet} ->
+        {icmp, IS, Addr, _TTL, Packet} ->
             error_logger:info_report([{dropping, Packet}, {address, Addr}]),
+            proxy(State);
+        {icmp, IS, _Addr, _TTL, _Packet} ->
             proxy(State)
     end.
 
 % To keep it simple, we use 64 byte packets
 % 4 bytes header, 2 bytes type, 2 bytes code, 2 bytes data length, 54 bytes data
 send(<<Data:42/bytes, Rest/binary>>, #state{is = Socket, addr = Addr, id = Id, seq = Seq} = State) ->
-    [{ok, Addr, _, _}] = gen_icmp:ping(Socket, [Addr], [
-            {id, Id},
-            {sequence, Seq},
-            {timeout, ?TIMEOUT},
-            {timestamp, false},
-            {data, <<(byte_size(Data)):16, Data/bytes>>}
-        ]),
+    ok = gen_icmp:send(Socket, Addr,
+        gen_icmp:echo(inet, Id, Seq, <<(byte_size(Data)):16, Data/bytes>>)),
+    reply(Socket, Addr, Id, Seq),
     send(Rest, State#state{seq = Seq + 1});
 send(Data, #state{is = Socket, addr = Addr, id = Id, seq = Seq}) ->
     Len = byte_size(Data),
-    [{ok, Addr, _, _}] = gen_icmp:ping(Socket, [Addr], [
-            {id, Id},
-            {sequence, Seq},
-            {timeout, ?TIMEOUT},
-            {timestamp, false},
-            {data, <<Len:16, Data/bytes, 0:((42-Len)*8)>>}
-        ]),
+    ok = gen_icmp:send(Socket, Addr,
+        gen_icmp:echo(inet, Id, Seq, <<Len:16, Data/bytes, 0:((42-Len)*8)>>)),
+    reply(Socket, Addr, Id, Seq),
     Seq+1.
+
+reply(Socket, Addr, Id, Seq) ->
+    receive
+        {icmp, Socket, Addr, _TTL,
+            <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, _/binary>>} ->
+                ok
+    after
+        5000 ->
+            error_logger:info_report([{reply, Id, Seq}]),
+            ok
+    end.
