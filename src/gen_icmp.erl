@@ -46,7 +46,14 @@
     family/1,
     getfd/1,
     set_ttl/3,
-    get_ttl/2
+    get_ttl/2,
+
+    icmp6_filter_setpassall/0, icmp6_filter_setpassall/1,
+    icmp6_filter_setblockall/0, icmp6_filter_setblockall/1,
+    icmp6_filter_setpass/2,
+    icmp6_filter_setblock/2,
+    icmp6_filter_willpass/2,
+    icmp6_filter_willblock/2
     ]).
 -export([recv/2, recv/3]).
 -export([ping/1, ping/2, ping/3]).
@@ -616,6 +623,68 @@ ipv6_unicast_hops() ->
         {unix, linux} -> 16;
         {unix, _} -> 4
     end.
+
+% IPv6 ICMP filtering
+icmp6_filter_setpassall(<<_:256>>) ->
+    icmp6_filter_setpassall().
+
+icmp6_filter_setpassall() ->
+    <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+    16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+    16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+    16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>.
+
+icmp6_filter_setblockall(<<_:256>>) ->
+    icmp6_filter_setblockall().
+
+icmp6_filter_setblockall() ->
+    <<0:256>>.
+
+%#define ICMP6_FILTER_SETPASS(type, filterp) \
+%            (((filterp)->icmp6_filt[(type) >> 5]) |= (1 << ((type) & 31)))
+icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    Fun = fun(N) -> N bor Value end,
+    array_set(Offset, Fun, Filter).
+
+
+%#define ICMP6_FILTER_SETBLOCK(type, filterp) \
+%            (((filterp)->icmp6_filt[(type) >> 5]) &= ~(1 << ((type) & 31)))
+icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    Fun = fun(N) -> N band bnot Value end,
+    array_set(Offset, Fun, Filter).
+
+%#define ICMP6_FILTER_WILLPASS(type, filterp) \
+%            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) != 0)
+icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    array_get(Offset, Filter) band Value =/= 0.
+
+%#define ICMP6_FILTER_WILLBLOCK(type, filterp) \
+%            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) == 0)
+icmp6_filter_willblock(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    array_get(Offset, Filter) band Value =:= 0.
+
+% Offset starts at 0
+array_set(Offset, Fun, Bin) ->
+    Array = array:from_list([ N || <<N:4/native-unsigned-integer-unit:8>> <= Bin ]),
+    Value = Fun(array:get(Offset, Array)),
+    << <<N:4/native-unsigned-integer-unit:8>> ||
+        N <- array:to_list(array:set(Offset, Value, Array))>>.
+
+array_get(Offset, Bin) ->
+    Array = array:from_list([ N || <<N:4/native-unsigned-integer-unit:8>> <= Bin ]),
+    array:get(Offset, Array).
 
 flush_events(Ref) ->
     receive

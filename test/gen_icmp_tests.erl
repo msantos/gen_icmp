@@ -115,3 +115,14 @@ ipv6_set_ttl_test() ->
      {_,_,_,_,_,_,_,_},
      {_,_,_,_},
      _}] = gen_icmp:ping("www.google.com", [inet6, {ttl,1}]).
+
+% ICMPv6 filter tests
+ipv6_filter_gen_test() ->
+    Filter = gen_icmp:icmp6_filter_setblockall(),
+
+    Filter1 = <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
+      0,0,0,0>>,
+    Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter),
+    Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter1),
+
+    Filter = gen_icmp:icmp6_filter_setblock(echo_request, Filter1).
