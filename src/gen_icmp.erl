@@ -48,9 +48,9 @@
     set_ttl/3,
     get_ttl/2,
 
-    filter/2,
-    icmp6_filter_setpassall/0, icmp6_filter_setpassall/1,
-    icmp6_filter_setblockall/0, icmp6_filter_setblockall/1,
+    filter/1, filter/2,
+    icmp6_filter_setpassall/0,
+    icmp6_filter_setblockall/0,
     icmp6_filter_setpass/2,
     icmp6_filter_setblock/2,
     icmp6_filter_willpass/2,
@@ -126,6 +126,8 @@ family(Ref) when is_pid(Ref) ->
 getfd(Ref) when is_pid(Ref) ->
     gen_server:call(Ref, getfd, infinity).
 
+filter(Ref) when is_pid(Ref) ->
+    gen_server:call(Ref, filter, infinity).
 filter(Ref, Filter) when is_pid(Ref) ->
     gen_server:call(Ref, {filter, Filter}, infinity).
 
@@ -264,6 +266,11 @@ handle_call(family, _From, #state{family = Family} = State) ->
 handle_call(getfd, _From, #state{fd = Socket} = State) ->
     {reply, Socket, State};
 
+handle_call(filter, _From, #state{family = inet6, fd = Socket} = State) ->
+    Reply = procket:getsockopt(Socket, ?IPPROTO_ICMPV6, icmp6_filter(), <<0:256>>),
+    {reply, Reply, State};
+handle_call(filter, _From, State) ->
+    {reply, unsupported, State};
 handle_call({filter, Filter}, _From, #state{family = inet6, fd = Socket} = State) ->
     Reply = procket:setsockopt(Socket, ?IPPROTO_ICMPV6, icmp6_filter(), Filter),
     {reply, Reply, State};
@@ -637,20 +644,29 @@ ipv6_unicast_hops() ->
 icmp6_filter() -> 1.
 
 % IPv6 ICMP filtering
-icmp6_filter_setpassall(<<_:256>>) ->
-    icmp6_filter_setpassall().
-
+%
+% Linux reverses the meaining macros in RFC3542
 icmp6_filter_setpassall() ->
-    <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-    16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-    16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-    16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>.
-
-icmp6_filter_setblockall(<<_:256>>) ->
-    icmp6_filter_setblockall().
+    case erlang:system_info(os_type) of
+        {unix, linux} ->
+            <<0:256>>;
+        {unix,_} ->
+            <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+              16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+              16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+              16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>
+    end.
 
 icmp6_filter_setblockall() ->
-    <<0:256>>.
+    case erlang:system_info(os_type) of
+        {unix, linux} ->
+            <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+              16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+              16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+              16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>;
+        {unix, _} ->
+            <<0:256>>
+    end.
 
 %#define ICMP6_FILTER_SETPASS(type, filterp) \
 %            (((filterp)->icmp6_filt[(type) >> 5]) |= (1 << ((type) & 31)))
@@ -658,7 +674,12 @@ icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
-    Fun = fun(N) -> N bor Value end,
+    Fun = case erlang:system_info(os_type) of
+        {unix, linux} ->
+            fun(N) -> N band bnot Value end;
+        {unix, _} ->
+            fun(N) -> N bor Value end
+    end,
     array_set(Offset, Fun, Filter).
 
 
@@ -668,7 +689,12 @@ icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
-    Fun = fun(N) -> N band bnot Value end,
+    Fun = case erlang:system_info(os_type) of
+        {unix, linux} ->
+            fun(N) -> N bor Value end;
+        {unix, _} ->
+            fun(N) -> N band bnot Value end
+    end,
     array_set(Offset, Fun, Filter).
 
 %#define ICMP6_FILTER_WILLPASS(type, filterp) \
@@ -677,7 +703,11 @@ icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
-    array_get(Offset, Filter) band Value =/= 0.
+    El = array_get(Offset, Filter),
+    case erlang:system_info(os_type) of
+        {unix, linux} -> El band Value =:= 0;
+        {unix, _} -> El band Value =/= 0
+    end.
 
 %#define ICMP6_FILTER_WILLBLOCK(type, filterp) \
 %            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) == 0)
@@ -685,7 +715,11 @@ icmp6_filter_willblock(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
-    array_get(Offset, Filter) band Value =:= 0.
+    El = array_get(Offset, Filter),
+    case erlang:system_info(os_type) of
+        {unix, linux} -> El band Value =/= 0;
+        {unix, _} -> El band Value =:= 0
+    end.
 
 % Offset starts at 0
 array_set(Offset, Fun, Bin) ->

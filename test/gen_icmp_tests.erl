@@ -123,8 +123,6 @@ ipv6_filter_gen_test() ->
     true = gen_icmp:icmp6_filter_willblock(echo_request, Filter),
     false = gen_icmp:icmp6_filter_willpass(echo_request, Filter),
 
-    Filter1 = <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,
-      0,0,0,0>>,
     Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter),
     Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter1),
 
@@ -133,13 +131,27 @@ ipv6_filter_gen_test() ->
 
     Filter = gen_icmp:icmp6_filter_setblock(echo_request, Filter1).
 
-ipv6_filter_test() ->
+ipv6_filter_get_test() ->
+    {ok, Socket} = gen_icmp:open([inet6]),
+
+    Pass = gen_icmp:icmp6_filter_setpassall(),
+    Block = gen_icmp:icmp6_filter_setblockall(),
+
+    {ok, Pass} = gen_icmp:filter(Socket),
+
+    ok = gen_icmp:filter(Socket, Block),
+    {ok, Block} = gen_icmp:filter(Socket),
+
+    ok = gen_icmp:close(Socket).
+
+ipv6_filter_all_test() ->
     {ok, Socket} = gen_icmp:open([inet6]),
 
     Block = gen_icmp:icmp6_filter_setblockall(),
     ok = gen_icmp:filter(Socket, Block),
 
-    [{error,timeout,"localhost",{0,0,0,0,0,0,0,1}}] = gen_icmp:ping(S, ["localhost"], []),
+    [{error,timeout,"localhost",{0,0,0,0,0,0,0,1}}] =
+        gen_icmp:ping(Socket, ["localhost"], [{timeout, 500}]),
 
     Pass = gen_icmp:icmp6_filter_setpassall(),
     ok = gen_icmp:filter(Socket, Pass),
@@ -148,6 +160,21 @@ ipv6_filter_test() ->
          {0,0,0,0,0,0,0,1},
          {0,0,0,0,0,0,0,1},
          _,
-         _}] = gen_icmp:ping(S, ["localhost"], []),
+         _}] = gen_icmp:ping(Socket, ["localhost"], [{timeout, 500}]),
+
+    ok = gen_icmp:close(Socket).
+
+ipv6_filter_echo_test() ->
+    {ok, Socket} = gen_icmp:open([inet6]),
+
+    Block = gen_icmp:icmp6_filter_setblockall(),
+    Filter = gen_icmp:icmp6_filter_setpass(echo_reply, Block),
+    ok = gen_icmp:filter(Socket, Filter),
+
+    [{ok,"localhost",
+         {0,0,0,0,0,0,0,1},
+         {0,0,0,0,0,0,0,1},
+         _,
+         _}] = gen_icmp:ping(Socket, ["localhost"], [{timeout, 500}]),
 
     ok = gen_icmp:close(Socket).
