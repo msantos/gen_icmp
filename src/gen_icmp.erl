@@ -275,7 +275,7 @@ handle_call({filter, Filter}, _From, #state{family = inet6, fd = Socket} = State
     Reply = procket:setsockopt(Socket, ?IPPROTO_ICMPV6, icmp6_filter(), Filter),
     {reply, Reply, State};
 handle_call({filter, _Filter}, _From, State) ->
-    {reply, ok, State};
+    {reply, unsupported, State};
 
 handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
