@@ -168,10 +168,8 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
             {[], [], Seq},
             Hosts2),
 
-    case Addresses of
+    Result = case Addresses of
         [] ->
-            ok = setopts(Socket, [{active,false}]),
-            flush_events(Socket),
             Errors;
         _ ->
             [ spawn(fun() ->
@@ -183,10 +181,12 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
                                              timeout = Timeout,
                                              timestamp = Timestamp
                                             }),
-            ok = setopts(Socket, [{active,false}]),
-            flush_events(Socket),
             Errors ++ Timeouts ++ Replies
-    end.
+    end,
+
+    ok = setopts(Socket, [{active,false}]),
+    flush_events(Socket),
+    Result.
 
 
 %%-------------------------------------------------------------------------
