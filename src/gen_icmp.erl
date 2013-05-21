@@ -48,6 +48,7 @@
     set_ttl/3,
     get_ttl/2,
 
+    filter/2,
     icmp6_filter_setpassall/0, icmp6_filter_setpassall/1,
     icmp6_filter_setblockall/0, icmp6_filter_setblockall/1,
     icmp6_filter_setpass/2,
@@ -124,6 +125,9 @@ family(Ref) when is_pid(Ref) ->
 
 getfd(Ref) when is_pid(Ref) ->
     gen_server:call(Ref, getfd, infinity).
+
+filter(Ref, Filter) when is_pid(Ref) ->
+    gen_server:call(Ref, {filter, Filter}, infinity).
 
 ping(Host) ->
     ping(Host, []).
@@ -259,6 +263,12 @@ handle_call(family, _From, #state{family = Family} = State) ->
     {reply, Family, State};
 handle_call(getfd, _From, #state{fd = Socket} = State) ->
     {reply, Socket, State};
+
+handle_call({filter, Filter}, _From, #state{family = inet6, fd = Socket} = State) ->
+    Reply = procket:setsockopt(Socket, ?IPPROTO_ICMPV6, icmp6_filter(), Filter),
+    {reply, Reply, State};
+handle_call({filter, _Filter}, _From, State) ->
+    {reply, ok, State};
 
 handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
@@ -623,6 +633,8 @@ ipv6_unicast_hops() ->
         {unix, linux} -> 16;
         {unix, _} -> 4
     end.
+
+icmp6_filter() -> 1.
 
 % IPv6 ICMP filtering
 icmp6_filter_setpassall(<<_:256>>) ->
