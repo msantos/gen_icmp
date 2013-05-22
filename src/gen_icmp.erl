@@ -157,6 +157,22 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Dedup = proplists:get_value(dedup, Options, true),
     Multi = proplists:get_value(multi, Options, false),
 
+    ICMP6_filter = lists:foldl(fun(T,X) ->
+            gen_icmp:icmp6_filter_setpass(T, X)
+        end,
+        gen_icmp:icmp6_filter_setblockall(),
+        [echo_reply, dst_unreach, packet_too_big,
+         time_exceeded, param_prob]),
+
+    Filter = proplists:get_value(filter, Options, ICMP6_filter),
+
+    ok = case Family of
+        inet6 ->
+            filter(Socket, Filter);
+        _ ->
+            ok
+    end,
+
     Hosts2 = addr_list(Family, Hosts, Dedup, Multi),
 
     {Addresses, Errors, _} = lists:foldl(

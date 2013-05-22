@@ -130,12 +130,13 @@ version. If you just need a simple example of sending a ping, also see:
                 Hosts = [ tuple() | string() ]
                 Options = [ Option ]
                 Option = {id, Id} | {sequence, Sequence} | {timeout, Timeout} | {data, Data} |
-                    {timestamp, boolean()} | {ttl, TTL} | inet | inet6
+                    {timestamp, boolean()} | {ttl, TTL} | {filter, Filter} | inet | inet6
                 Id = uint16()
                 Sequence = uint16()
                 Timeout = int()
                 TTL = uint8()
                 Data = binary()
+                Filter = binary()
                 Responses = [ Response ]
                 Response = {ok, Host, Address, ReplyAddr, Details, Payload}
                     | {error, Error, Host, Address, ReplyAddr, Details, Payload}
@@ -194,6 +195,14 @@ version. If you just need a simple example of sending a ping, also see:
         (the elapsed time in the return value will be set to 0).
 
         The timeout defaults to 5 seconds.
+
+        ICMPv6 sockets can restrict which ICMPv6 types are received by the
+        socket using the filter option.  The filter argument is a binary
+        generated using the icmp6_filter functions described below.
+
+        The default filter allows: ICMP6_ECHO_REPLY, ICMP6_DST_UNREACH,
+        ICMP6_PACKET_TOO_BIG, ICMP6_TIME_EXCEEDED and ICMP6_PARAM_PROB.
+        Note: ping/3 does not restore the original filter on the socket.
 
     echo(Id, Sequence) -> Packet
 
