@@ -80,6 +80,9 @@
         rs
     }).
 
+-ifndef(PF_INET6).
+-define(PF_INET6, family(inet6)).
+-endif.
 
 %%-------------------------------------------------------------------------
 %%% API
@@ -449,4 +452,13 @@ flush_events(Ref) ->
             flush_events(Ref)
     after
             0 -> ok
+    end.
+
+family(inet6) ->
+    case os:type() of
+        {unix,darwin} -> 30;
+        {unix,freebsd} -> 28;
+        {unix,linux} -> 10;
+        {unix,netbsd} -> 24;
+        {unix,openbsd} -> 24
     end.
