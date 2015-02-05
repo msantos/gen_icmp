@@ -293,6 +293,9 @@ handle_info({tracert, Daddr, Data}, #state{pid = Pid} = State) ->
     Pid ! {tracert, self(), Daddr, Data},
     {noreply, State};
 
+handle_info({'EXIT',_,normal}, State) ->
+    {noreply, State};
+
 handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
