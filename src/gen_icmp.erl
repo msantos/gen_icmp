@@ -1,4 +1,4 @@
-%% Copyright (c) 2010-2013, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2010-2016, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -480,7 +480,7 @@ echo(Family, Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
 
 % Default ICMP echo payload
 payload(echo) ->
-    {Mega,Sec,USec} = erlang:now(),
+    {Mega,Sec,USec} = os:timestamp(),
     <<Mega:32,Sec:32,USec:32, (list_to_binary(lists:seq($\s, $K)))/binary>>.
 
 % Set the TTL on a socket
@@ -573,7 +573,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Elapsed, Payload} = case Timestamp of
                 true ->
                     <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timer:now_diff(now(), {Mega,Sec,USec}) div 1000, Data1};
+                    {timer:now_diff(os:timestamp(), {Mega,Sec,USec}) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
@@ -609,7 +609,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Elapsed, Payload} = case Timestamp of
                 true ->
                     <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timer:now_diff(now(), {Mega,Sec,USec}) div 1000, Data1};
+                    {timer:now_diff(os:timestamp(), {Mega,Sec,USec}) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
