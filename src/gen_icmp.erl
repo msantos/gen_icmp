@@ -61,7 +61,10 @@
 -export([
         echo/3, echo/4,
         packet/2, packet/3,
-        parse/1, parse/2
+        parse/1, parse/2,
+
+        gettime/0,
+        timediff/1, timediff/2
     ]).
 
 -export([start_link/2, start/2]).
@@ -480,7 +483,7 @@ echo(Family, Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
 
 % Default ICMP echo payload
 payload(echo) ->
-    {Mega,Sec,USec} = os:timestamp(),
+    {Mega,Sec,USec} = gettime(),
     <<Mega:32,Sec:32,USec:32, (list_to_binary(lists:seq($\s, $K)))/binary>>.
 
 % Set the TTL on a socket
@@ -573,7 +576,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Elapsed, Payload} = case Timestamp of
                 true ->
                     <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timer:now_diff(os:timestamp(), {Mega,Sec,USec}) div 1000, Data1};
+                    {timediff({Mega,Sec,USec}) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
@@ -609,7 +612,7 @@ ping_loop(Hosts, Acc, #ping_opt{
             {Elapsed, Payload} = case Timestamp of
                 true ->
                     <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timer:now_diff(os:timestamp(), {Mega,Sec,USec}) div 1000, Data1};
+                    {timediff({Mega,Sec,USec}) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
@@ -758,3 +761,24 @@ flush_events(Ref) ->
     after
         0 -> ok
     end.
+
+gettime() ->
+    try erlang:monotonic_time(micro_seconds) of
+        N ->
+            MegaSecs = N div 1000000000000,
+            Secs = N div 1000000 - MegaSecs*1000000,
+            MicroSecs = N rem 1000000,
+            {MegaSecs, Secs, MicroSecs}
+    catch
+        error:undef ->
+            os:timestamp()
+    end.
+
+timediff(T) ->
+    timediff(gettime(), T).
+
+timediff(T1, T2) ->
+    time_to_integer(T1) - time_to_integer(T2).
+
+time_to_integer({MegaSecs, Secs, MicroSecs}) ->
+    (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.

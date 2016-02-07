@@ -136,44 +136,44 @@ trace(Ref,
     Packet = Fun({Saddr, Sport}, {Daddr, Dport}, TTL),
     ok = probe(Ref, Daddr, Dport, TTL, Packet),
 
-    Now = os:timestamp(),
+    Now = gen_icmp:gettime(),
 
     % No catch all match because packets may be received after the timeout
     receive
         % Response from destination
         {icmp, Ref, Daddr, {_, Data}} ->
             trace(Ref, State#state{ttl = 0},
-                [{Daddr, timer:now_diff(os:timestamp(), Now), {icmp, Data}}|Acc]);
+                [{Daddr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
 
         % Response from intermediate host
         % IPv4 ICMP payload
         {icmp, Ref, {_,_,_,_} = Addr, {icmp, <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes,
                 _Type:8, _Code:8, _Checksum:16, Sport:16, _/binary>> = Data}} ->
             trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, timer:now_diff(os:timestamp(), Now), {icmp, Data}}|Acc]);
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
 
         % IPv6 ICMP payload
         {icmp, Ref, {_,_,_,_,_,_,_,_} = Addr, {icmp, <<_ICMPHeader:8/bytes, _IPv6Header:40/bytes,
                 _Type:8, _Code:8, _Checksum:16, Sport:16, _/binary>> = Data}} ->
             trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, timer:now_diff(os:timestamp(), Now), {icmp, Data}}|Acc]);
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
 
         % IPv4 UDP payload
         {icmp, Ref, {_,_,_,_} = Addr, {udp, <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes,
                 Sport:16, _/binary>> = Data}} ->
             trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, timer:now_diff(os:timestamp(), Now), {icmp, Data}}|Acc]);
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
 
         % IPv6 UDP payload
         {icmp, Ref, {_,_,_,_,_,_,_,_} = Addr, {udp, <<_ICMPHeader:8/bytes, _IPv6Header:40/bytes,
                 _Sport:16, _/binary>> = Data}} ->
             trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, timer:now_diff(os:timestamp(), Now), {icmp, Data}}|Acc]);
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
 
         % Response from protocol handler
         {tracert, Ref, Saddr, Data} ->
             trace(Ref, State#state{ttl = 0},
-                [{Saddr, timer:now_diff(os:timestamp(), Now), Data}|Acc])
+                [{Saddr, gen_icmp:timediff(Now), Data}|Acc])
     after
         Timeout ->
             trace(Ref, State#state{ttl = TTL+1}, [timeout|Acc])
