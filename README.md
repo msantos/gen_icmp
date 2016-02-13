@@ -139,12 +139,13 @@ version. If you just need a simple example of sending a ping, also see:
                 Filter = binary()
                 Responses = [ Response ]
                 Response = {ok, Host, Address, ReplyAddr, Details, Payload}
-                    | {error, Error, Host, Address, ReplyAddr, Details, Payload}
-                    | {error, timeout, Host, Address}
+                    | {error, ICMPError, Host, Address, ReplyAddr, Details, Payload}
+                    | {error, Error, Host, Address}
                 Details = {Id, Sequence, TTL, Elapsed}
                 Elapsed = int() | undefined
                 Payload = binary()
-                Error = unreach_host | timxceed_intrans
+                ICMPError = unreach_host | timxceed_intrans
+                Error = timeout | inet:posix()
 
         ping/1 is a convenience function to send a single ping
         packet. The argument to ping/1 can be either a hostname or a

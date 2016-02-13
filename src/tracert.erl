@@ -99,7 +99,7 @@ host(Host, Options) ->
 host(Ref, Host, Options) ->
     State = proplist_to_record(Options),
     #state{family = Family} = State,
-    {ok, _, [Daddr|_]} = gen_icmp:parse(Family, Host),
+    {ok, [Daddr|_]} = gen_icmp:parse(Family, Host),
     ok = gen_server:call(Ref, {handler, State#state.handler}, infinity),
     trace(Ref, State#state{daddr = Daddr}).
 

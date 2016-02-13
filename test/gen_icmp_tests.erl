@@ -1,4 +1,4 @@
-%% Copyright (c) 2012, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2012-2016, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -75,6 +75,10 @@ reuse_socket_test() ->
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
+
+% Hostname not resolveable
+nxdomain_test() ->
+    [{error,nxdomain,"unresolveable12345.notexist",undefined}] = gen_icmp:ping("unresolveable12345.notexist").
 
 % Set the socket TTL
 ipv4_set_ttl_test() ->

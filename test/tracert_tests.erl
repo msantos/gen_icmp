@@ -1,4 +1,4 @@
-%% Copyright (c) 2012, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2012-2016, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -78,3 +78,6 @@ traceroute_timeout_test() ->
     [timeout] = tracert:host({255,255,255,254}, [
                 {ttl, 1}, {max_hops, 2}, {timeout, 5}
                 ]).
+
+traceroute_nxdomain_test() ->
+    {'EXIT',{{badmatch,{error,nxdomain}},_}} = (catch tracert:host("unresolveable12345.notexist")).

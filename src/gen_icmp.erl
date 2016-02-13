@@ -532,8 +532,12 @@ addr_list0(Family, Hosts, true) ->
       end || Host <- Hosts ];
 addr_list0(Family, Hosts, false) ->
     [ begin
-          {ok, Host, [IP|_]} = parse(Family, Host),
-          {ok, Host, IP}
+          case parse(Family, Host) of
+              {ok, [IP|_]} ->
+                {ok, Host, IP};
+              {error, Error} ->
+                {error, Error, Host, undefined}
+          end
       end || Host <- Hosts ].
 
 parse(Addr) ->
@@ -542,16 +546,16 @@ parse(Addr) ->
 parse(Family, Addr) when is_list(Addr) ->
     parse_or_resolve(Family, Addr, inet_parse:address(Addr));
 parse(_Family, Addr) when is_tuple(Addr) ->
-    {ok, Addr, [Addr]}.
+    {ok, [Addr]}.
 
-parse_or_resolve(_Family, Addr, {ok, IP}) ->
-    {ok, Addr, [IP]};
+parse_or_resolve(_Family, _Addr, {ok, IP}) ->
+    {ok, [IP]};
 parse_or_resolve(Family, Addr, {error, einval}) ->
     case inet:gethostbyname(Addr, Family) of
         {ok, #hostent{h_addr_list = IPs}} ->
-            {ok, Addr, lists:usort(IPs)};
-        _ ->
-            [ {error, Addr, nxdomain} ]
+            {ok, lists:usort(IPs)};
+        Error ->
+            Error
     end.
 
 ping_reply(Hosts, #ping_opt{s = Socket, timeout = Timeout} = Opt) ->
