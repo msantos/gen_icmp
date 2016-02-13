@@ -527,7 +527,7 @@ resdedup0([]) ->
 
 addr_list0(Family, Hosts, true) ->
     [ begin
-          {ok, Host, Ips} = parse(Family, Host),
+          {ok, Ips} = parse(Family, Host),
           [ {ok, Host, Ip} || Ip <- Ips ]
       end || Host <- Hosts ];
 addr_list0(Family, Hosts, false) ->
