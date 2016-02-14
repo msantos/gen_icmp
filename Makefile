@@ -22,7 +22,7 @@ deps: $(REBAR)
 	@$(REBAR) check-deps || $(REBAR) get-deps
 
 test: $(REBAR) compile
-	@$(REBAR) xref eunit recursive=false
+	@$(REBAR) xref ct recursive=false
 
 examples: eg
 eg:

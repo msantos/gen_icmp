@@ -28,34 +28,60 @@
 %% LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 %% ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 %% POSSIBILITY OF SUCH DAMAGE.
--module(gen_icmp_tests).
+-module(gen_icmp_SUITE).
 
--compile(export_all).
+-include_lib("common_test/include/ct.hrl").
 
--include_lib("eunit/include/eunit.hrl").
+-export([
+        all/0
+    ]).
 
+-export([
+        single_host_ok/1,
+        multiple_hosts_ok/1,
+        multiple_hosts_no_dedup_ok/1,
+        single_host_timeout/1,
+        multiple_host_timeout/1,
+        reuse_socket/1,
+        nxdomain/1,
+        ipv4_set_ttl/1,
+        ipv6_single_host_ok/1,
+        ipv6_multiple_hosts_ok/1,
+        ipv6_set_ttl/1,
+        ipv6_filter_gen/1,
+        ipv6_filter_get/1,
+        ipv6_filter_all/1,
+        ipv6_filter_echo/1
+    ]).
 
-single_host_ok_test() ->
+all() ->
+    [single_host_ok, multiple_hosts_ok, multiple_hosts_no_dedup_ok,
+        single_host_timeout, multiple_host_timeout, reuse_socket,
+        nxdomain, ipv4_set_ttl, ipv6_single_host_ok, ipv6_multiple_hosts_ok,
+        ipv6_set_ttl, ipv6_filter_gen, ipv6_filter_get, ipv6_filter_all,
+        ipv6_filter_echo].
+
+single_host_ok(_Config) ->
     [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,0,_,_},
                 <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("www.google.com").
 
 % multiple hosts specified as strings and tuples, expect 2 responses
 % only since we have a duplicate entries
-multiple_hosts_ok_test() ->
+multiple_hosts_ok(_Config) ->
     [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
      {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
 
-multiple_hosts_no_dedup_ok_test() ->
+multiple_hosts_no_dedup_ok(_Config) ->
     [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
      {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
      {ok,"127.0.0.1", {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"], [{dedup, false}]).
 
-single_host_timeout_test() ->
+single_host_timeout(_Config) ->
     [{error,timeout,"192.168.209.244",{192,168,209,244}}] = gen_icmp:ping("192.168.209.244", [{timeout, 5}]).
 
-multiple_host_timeout_test() ->
+multiple_host_timeout(_Config) ->
     [{error,timeout,"192.168.209.244",{192,168,209,244}},
      {error,timeout,"192.168.147.147",{192,168,147,147}},
      {ok,"127.0.0.1",{127,0,0,1},{127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
@@ -63,7 +89,7 @@ multiple_host_timeout_test() ->
 
 % Order should be deterministic, since localhost will respond faster
 % than a remote host
-reuse_socket_test() ->
+reuse_socket(_Config) ->
     {ok, Socket} = gen_icmp:open(),
 
     [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
@@ -77,11 +103,11 @@ reuse_socket_test() ->
     ok = gen_icmp:close(Socket).
 
 % Hostname not resolveable
-nxdomain_test() ->
+nxdomain(_Config) ->
     [{error,nxdomain,"unresolveable12345.notexist",undefined}] = gen_icmp:ping("unresolveable12345.notexist").
 
 % Set the socket TTL
-ipv4_set_ttl_test() ->
+ipv4_set_ttl(_Config) ->
     [{error,timxceed_intrans,"www.google.com",
      {_,_,_,_},
      {_,_,_,_},
@@ -89,11 +115,11 @@ ipv4_set_ttl_test() ->
      _}] = gen_icmp:ping("www.google.com", [{ttl, 1}]),
     true = TTL > 0.
 
-ipv6_single_host_ok_test() ->
+ipv6_single_host_ok(_Config) ->
     [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_},{_,_,_,_,_,_,_,_}, {_,0,_,_},
      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("ipv6.google.com", [inet6]).
 
-ipv6_multiple_hosts_ok_test() ->
+ipv6_multiple_hosts_ok(_Config) ->
     [{ok,"tunnelbroker.net",
      {_,_,_,_,_,_,_,_},
      {_,_,_,_,_,_,_,_},
@@ -113,7 +139,7 @@ ipv6_different_request_reply_addresses() ->
       <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("::", [inet6]).
 
 % Set the socket TTL
-ipv6_set_ttl_test() ->
+ipv6_set_ttl(_Config) ->
     [{error,unreach_net,"www.google.com",
      {_,_,_,_,_,_,_,_},
      {_,_,_,_,_,_,_,_},
@@ -121,7 +147,7 @@ ipv6_set_ttl_test() ->
      _}] = gen_icmp:ping("www.google.com", [inet6, {ttl,1}]).
 
 % ICMPv6 filter tests
-ipv6_filter_gen_test() ->
+ipv6_filter_gen(_Config) ->
     Filter = gen_icmp:icmp6_filter_setblockall(),
 
     true = gen_icmp:icmp6_filter_willblock(echo_request, Filter),
@@ -135,7 +161,7 @@ ipv6_filter_gen_test() ->
 
     Filter = gen_icmp:icmp6_filter_setblock(echo_request, Filter1).
 
-ipv6_filter_get_test() ->
+ipv6_filter_get(_Config) ->
     {ok, Socket} = gen_icmp:open([inet6]),
 
     Pass = gen_icmp:icmp6_filter_setpassall(),
@@ -148,7 +174,7 @@ ipv6_filter_get_test() ->
 
     ok = gen_icmp:close(Socket).
 
-ipv6_filter_all_test() ->
+ipv6_filter_all(_Config) ->
     {ok, Socket} = gen_icmp:open([inet6]),
 
     Block = gen_icmp:icmp6_filter_setblockall(),
@@ -170,7 +196,7 @@ ipv6_filter_all_test() ->
 
     ok = gen_icmp:close(Socket).
 
-ipv6_filter_echo_test() ->
+ipv6_filter_echo(_Config) ->
     {ok, Socket} = gen_icmp:open([inet6]),
 
     Block = gen_icmp:icmp6_filter_setblockall(),
