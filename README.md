@@ -182,12 +182,9 @@ version. If you just need a simple example of sending a ping, also see:
         best performance, ping/3 should be used instead, with the socket
         being maintained between runs.
 
-        Duplicate hosts in the address list are removed by default. Add
-        {dedup, false} to options to disable this behaviour.
-
         By default only one address per hostname is pinged. To
         enable pinging all addresses per hostname pass {multi, true}
-        to options
+        to options.
 
         A ping payload contains a 12 byte timestamp generated using
         erlang:now/0. When creating a custom payload, the first 12 bytes of

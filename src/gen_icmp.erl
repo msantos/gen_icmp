@@ -66,6 +66,7 @@
         gettime/0,
         timediff/1, timediff/2
     ]).
+-export([addr_list/3]).
 
 -export([start_link/2, start/2]).
 %% gen_server callbacks
@@ -157,7 +158,6 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
     Data = proplists:get_value(data, Options, payload(echo)),
     Timeout = proplists:get_value(timeout, Options, ?PING_TIMEOUT),
     Timestamp = proplists:get_value(timestamp, Options, true),
-    Dedup = proplists:get_value(dedup, Options, true),
     Multi = proplists:get_value(multi, Options, false),
 
     ICMP6_filter = lists:foldl(fun(T,X) ->
@@ -176,7 +176,7 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
             ok
     end,
 
-    Hosts2 = addr_list(Family, Hosts, Dedup, Multi),
+    Hosts2 = addr_list(Family, Hosts, Multi),
 
     {Addresses, Errors, _} = lists:foldl(
             fun({ok, Host, Addr}, {NHosts, Nerr, NSeq}) ->
@@ -511,34 +511,17 @@ get_ttl(FD, inet6) ->
 %%
 %% ping
 %%
-addr_list(Family, Hosts, false, Multi) ->
-    addr_list0(Family, Hosts, Multi);
-addr_list(Family, Hosts, true, Multi) ->
-    resdedup(addr_list0(Family, Hosts, Multi)).
-
-resdedup(List) ->
-    resdedup0(lists:keysort(3, List)).
-resdedup0([{ok, _, IP} = A, {ok, _, IP} | List]) ->
-    resdedup0([A | List]);
-resdedup0([A|List]) ->
-    [A | resdedup0(List)];
-resdedup0([]) ->
-    [].
-
-addr_list0(Family, Hosts, true) ->
-    [ begin
-          {ok, Ips} = parse(Family, Host),
-          [ {ok, Host, Ip} || Ip <- Ips ]
-      end || Host <- Hosts ];
-addr_list0(Family, Hosts, false) ->
-    [ begin
-          case parse(Family, Host) of
-              {ok, [IP|_]} ->
-                {ok, Host, IP};
-              {error, Error} ->
-                {error, Error, Host, undefined}
-          end
-      end || Host <- Hosts ].
+addr_list(Family, Hosts, Multi) ->
+    lists:flatmap(fun(Host) ->
+                case parse(Family, Host) of
+                    {ok, IPs} when Multi == true ->
+                        [{ok, Host, IP} || IP <- IPs];
+                    {ok, [IP|_]} ->
+                        [{ok, Host, IP}];
+                    {error, Error} ->
+                        [{error, Error, Host, undefined}]
+                end
+        end, Hosts).
 
 parse(Addr) ->
     parse(inet, Addr).
@@ -553,7 +536,7 @@ parse_or_resolve(_Family, _Addr, {ok, IP}) ->
 parse_or_resolve(Family, Addr, {error, einval}) ->
     case inet:gethostbyname(Addr, Family) of
         {ok, #hostent{h_addr_list = IPs}} ->
-            {ok, lists:usort(IPs)};
+            {ok, IPs};
         Error ->
             Error
     end.

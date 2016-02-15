@@ -31,22 +31,23 @@
 -module(gen_icmp_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("kernel/include/inet.hrl").
 
 -export([
         all/0
     ]).
 
 -export([
-        single_host_ok/1,
-        multiple_hosts_ok/1,
-        multiple_hosts_no_dedup_ok/1,
+        single_host/1,
+        multiple_hosts/1,
         single_host_timeout/1,
         multiple_host_timeout/1,
+        ipv4_all_addresses/1,
         reuse_socket/1,
         nxdomain/1,
         ipv4_set_ttl/1,
-        ipv6_single_host_ok/1,
-        ipv6_multiple_hosts_ok/1,
+        ipv6_single_host/1,
+        ipv6_multiple_hosts/1,
         ipv6_set_ttl/1,
         ipv6_filter_gen/1,
         ipv6_filter_get/1,
@@ -55,37 +56,37 @@
     ]).
 
 all() ->
-    [single_host_ok, multiple_hosts_ok, multiple_hosts_no_dedup_ok,
-        single_host_timeout, multiple_host_timeout, reuse_socket,
-        nxdomain, ipv4_set_ttl, ipv6_single_host_ok, ipv6_multiple_hosts_ok,
-        ipv6_set_ttl, ipv6_filter_gen, ipv6_filter_get, ipv6_filter_all,
-        ipv6_filter_echo].
+    [single_host, multiple_hosts, single_host_timeout, multiple_host_timeout,
+        ipv4_all_addresses, reuse_socket, nxdomain, ipv4_set_ttl,
+        ipv6_single_host, ipv6_multiple_hosts, ipv6_set_ttl, ipv6_filter_gen,
+        ipv6_filter_get, ipv6_filter_all, ipv6_filter_echo].
 
-single_host_ok(_Config) ->
+single_host(_Config) ->
     [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,0,_,_},
                 <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("www.google.com").
 
 % multiple hosts specified as strings and tuples, expect 2 responses
 % only since we have a duplicate entries
-multiple_hosts_ok(_Config) ->
-    [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
-     {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
-    gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
-
-multiple_hosts_no_dedup_ok(_Config) ->
+multiple_hosts(_Config) ->
     [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
      {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
      {ok,"127.0.0.1", {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
-    gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"], [{dedup, false}]).
+    gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
 
 single_host_timeout(_Config) ->
     [{error,timeout,"192.168.209.244",{192,168,209,244}}] = gen_icmp:ping("192.168.209.244", [{timeout, 5}]).
 
 multiple_host_timeout(_Config) ->
-    [{error,timeout,"192.168.209.244",{192,168,209,244}},
-     {error,timeout,"192.168.147.147",{192,168,147,147}},
+    [{error,timeout,"192.168.147.147",{192,168,147,147}},
+     {error,timeout,"192.168.209.244",{192,168,209,244}},
      {ok,"127.0.0.1",{127,0,0,1},{127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
     gen_icmp:ping(["192.168.209.244", "127.0.0.1", "192.168.147.147"], [{timeout, 5}]).
+
+ipv4_all_addresses(_Config) ->
+    {ok, #hostent{h_addr_list = IPs}} = inet:gethostbyname("www.google.com", inet),
+    Result = gen_icmp:ping("www.google.com", [{multi,true}]),
+    N = length(IPs),
+    N = length(Result).
 
 % Order should be deterministic, since localhost will respond faster
 % than a remote host
@@ -115,11 +116,11 @@ ipv4_set_ttl(_Config) ->
      _}] = gen_icmp:ping("www.google.com", [{ttl, 1}]),
     true = TTL > 0.
 
-ipv6_single_host_ok(_Config) ->
+ipv6_single_host(_Config) ->
     [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_},{_,_,_,_,_,_,_,_}, {_,0,_,_},
      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("ipv6.google.com", [inet6]).
 
-ipv6_multiple_hosts_ok(_Config) ->
+ipv6_multiple_hosts(_Config) ->
     [{ok,"tunnelbroker.net",
      {_,_,_,_,_,_,_,_},
      {_,_,_,_,_,_,_,_},
