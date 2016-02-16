@@ -48,6 +48,7 @@
         ipv4_set_ttl/1,
         ipv6_single_host/1,
         ipv6_multiple_hosts/1,
+        ipv6_different_request_reply_addresses/1,
         ipv6_set_ttl/1,
         ipv6_filter_gen/1,
         ipv6_filter_get/1,
@@ -58,7 +59,8 @@
 all() ->
     [single_host, multiple_hosts, single_host_timeout, multiple_host_timeout,
         ipv4_all_addresses, reuse_socket, nxdomain, ipv4_set_ttl,
-        ipv6_single_host, ipv6_multiple_hosts, ipv6_set_ttl, ipv6_filter_gen,
+        ipv6_single_host, ipv6_multiple_hosts,
+        ipv6_different_request_reply_addresses, ipv6_set_ttl, ipv6_filter_gen,
         ipv6_filter_get, ipv6_filter_all, ipv6_filter_echo].
 
 single_host(_Config) ->
@@ -132,7 +134,7 @@ ipv6_multiple_hosts(_Config) ->
      {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
     gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]).
 
-ipv6_different_request_reply_addresses() ->
+ipv6_different_request_reply_addresses(_Config) ->
     [{ok,"::",
      {0,0,0,0,0,0,0,0},
      {0,0,0,0,0,0,0,1},
