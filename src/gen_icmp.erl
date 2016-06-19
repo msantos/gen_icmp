@@ -750,16 +750,7 @@ flush_events(Ref) ->
     end.
 
 gettime() ->
-    try erlang:monotonic_time(micro_seconds) of
-        N ->
-            MegaSecs = N div 1000000000000,
-            Secs = N div 1000000 - MegaSecs*1000000,
-            MicroSecs = N rem 1000000,
-            {MegaSecs, Secs, MicroSecs}
-    catch
-        error:undef ->
-            os:timestamp()
-    end.
+    os:timestamp().
 
 timediff(T) ->
     timediff(gettime(), T).
