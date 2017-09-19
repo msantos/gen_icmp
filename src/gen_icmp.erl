@@ -1,4 +1,4 @@
-%% Copyright (c) 2010-2016, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2010-2017, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -483,8 +483,8 @@ echo(Family, Id, Seq, Payload) when is_integer(Id), Id >= 0, Id < 16#FFFF,
 
 % Default ICMP echo payload
 payload(echo) ->
-    {Mega,Sec,USec} = gettime(),
-    <<Mega:32,Sec:32,USec:32, (list_to_binary(lists:seq($\s, $K)))/binary>>.
+    USec = gettime(),
+    <<USec:8/signed-integer-unit:8, (list_to_binary(lists:seq($\s, $O)))/binary>>.
 
 % Set the TTL on a socket
 set_ttl(FD, inet, TTL) ->
@@ -562,8 +562,8 @@ ping_loop(Hosts, Acc, #ping_opt{
             <<?ICMP_ECHOREPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
-                    <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timediff({Mega,Sec,USec}) div 1000, Data1};
+                    <<USec:8/signed-integer-unit:8, Data1/binary>> = Data,
+                    {timediff(USec) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
@@ -598,8 +598,8 @@ ping_loop(Hosts, Acc, #ping_opt{
             <<?ICMP6_ECHO_REPLY:8, 0:8, _Checksum:16, Id:16, Seq:16, Data/binary>>} ->
             {Elapsed, Payload} = case Timestamp of
                 true ->
-                    <<Mega:32, Sec:32, USec:32, Data1/binary>> = Data,
-                    {timediff({Mega,Sec,USec}) div 1000, Data1};
+                    <<USec:8/signed-integer-unit:8, Data1/binary>> = Data,
+                    {timediff(USec) div 1000, Data1};
                 false ->
                     {0, Data}
             end,
@@ -750,13 +750,19 @@ flush_events(Ref) ->
     end.
 
 gettime() ->
-    os:timestamp().
+    try erlang:monotonic_time(micro_seconds) of
+        N ->
+            N
+    catch
+        error:undef ->
+            timestamp_to_microseconds(os:timestamp())
+    end.
 
 timediff(T) ->
     timediff(gettime(), T).
 
 timediff(T1, T2) ->
-    time_to_integer(T1) - time_to_integer(T2).
+    T1 - T2.
 
-time_to_integer({MegaSecs, Secs, MicroSecs}) ->
+timestamp_to_microseconds({MegaSecs, Secs, MicroSecs}) ->
     (MegaSecs * 1000000 + Secs) * 1000000 + MicroSecs.

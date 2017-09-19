@@ -186,11 +186,11 @@ version. If you just need a simple example of sending a ping, also see:
         enable pinging all addresses per hostname pass {multi, true}
         to options.
 
-        A ping payload contains a 12 byte timestamp generated using
-        erlang:now/0. When creating a custom payload, the first 12 bytes of
-        the ICMP echo reply payload will be used for calculating the elapsed
-        time. To disable this behaviour, use the option {timestamp,false}
-        (the elapsed time in the return value will be set to 0).
+        A ping payload contains an 8 byte timestamp in microseconds. When
+        creating a custom payload, the first 8 bytes of the ICMP echo
+        reply payload will be used for calculating the elapsed time. To
+        disable this behaviour, use the option {timestamp,false} (the
+        elapsed time in the return value will be set to 0).
 
         The timeout defaults to 5 seconds.
 
@@ -208,8 +208,8 @@ version. If you just need a simple example of sending a ping, also see:
                 Sequence = uint16()
                 Packet = binary()
 
-        Creates an ICMP echo packet with the results of erlang:now() used
-        as the timestamp and a payload consisting of ASCII 32 to 75.
+        Creates an ICMP echo packet with an 8 byte timestamp and a
+        payload consisting of ASCII 32 to 79.
 
     echo(Id, Sequence, Payload) -> Packet
 
@@ -362,7 +362,7 @@ executable needs superuser privileges).
          {173,194,64,99},
          {173,194,64,99},
          18411,0,50,
-         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
 
     2> gen_icmp:ping(["www.google.com", {192,168,213,4}, "193.180.168.20", {192,0,32,10}]).
     [{error,timeout,"193.180.168.20",{193,180,168,20}},
@@ -377,12 +377,12 @@ executable needs superuser privileges).
          {192,0,32,10},
          {192,0,32,10},
          {18411,1,103},
-         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
      {ok,"www.google.com",
          {173,194,77,99},
          {173,194,77,99},
          {18411,0,50},
-         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
 
 ### IPv6
 
@@ -391,7 +391,7 @@ executable needs superuser privileges).
          {9735,63664,16395,2054,0,0,0,4098},
          {9735,63664,16395,2054,0,0,0,4098},
          {18411,0,64,62},
-         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}]
+         <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
 
     2> tracert:host("google.com", [inet6]).
 

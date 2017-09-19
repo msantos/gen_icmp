@@ -1,4 +1,4 @@
-%% Copyright (c) 2012-2016, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2012-2017, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,7 @@
     ]).
 
 -export([
+        negative_monotonic_time/1,
         single_host/1,
         multiple_hosts/1,
         single_host_timeout/1,
@@ -57,22 +58,28 @@
     ]).
 
 all() ->
-    [single_host, multiple_hosts, single_host_timeout, multiple_host_timeout,
-        ipv4_all_addresses, reuse_socket, nxdomain, ipv4_set_ttl,
-        ipv6_single_host, ipv6_multiple_hosts,
+    [negative_monotonic_time, single_host, multiple_hosts, single_host_timeout,
+        multiple_host_timeout, ipv4_all_addresses, reuse_socket, nxdomain,
+        ipv4_set_ttl, ipv6_single_host, ipv6_multiple_hosts,
         ipv6_different_request_reply_addresses, ipv6_set_ttl, ipv6_filter_gen,
         ipv6_filter_get, ipv6_filter_all, ipv6_filter_echo].
 
+negative_monotonic_time(_Config) ->
+    T1 = -576460734035973578,
+    T2 = -576460730647211647,
+    3388761931 = gen_icmp:timediff(T2, T1),
+    ok.
+
 single_host(_Config) ->
     [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,0,_,_},
-                <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("www.google.com").
+                <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] = gen_icmp:ping("www.google.com").
 
 % multiple hosts specified as strings and tuples, expect 2 responses
 % only since we have a duplicate entries
 multiple_hosts(_Config) ->
-    [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
-     {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
-     {ok,"127.0.0.1", {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
+    [{ok,"www.google.com", {_,_,_,_}, {_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
+     {ok,{127,0,0,1}, {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
+     {ok,"127.0.0.1", {127,0,0,1}, {127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] =
     gen_icmp:ping(["www.google.com", {127,0,0,1}, "127.0.0.1"]).
 
 single_host_timeout(_Config) ->
@@ -81,7 +88,7 @@ single_host_timeout(_Config) ->
 multiple_host_timeout(_Config) ->
     [{error,timeout,"192.168.147.147",{192,168,147,147}},
      {error,timeout,"192.168.209.244",{192,168,209,244}},
-     {ok,"127.0.0.1",{127,0,0,1},{127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
+     {ok,"127.0.0.1",{127,0,0,1},{127,0,0,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] =
     gen_icmp:ping(["192.168.209.244", "127.0.0.1", "192.168.147.147"], [{timeout, 5}]).
 
 ipv4_all_addresses(_Config) ->
@@ -95,12 +102,12 @@ ipv4_all_addresses(_Config) ->
 reuse_socket(_Config) ->
     {ok, Socket} = gen_icmp:open(),
 
-    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
-     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
+    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
+     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
-    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
-     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
+    [{ok,"www.google.com",{_,_,_,_},{_,_,_,_}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
+     {ok,"127.0.1.1",{127,0,1,1},{127,0,1,1}, {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] =
         gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
@@ -120,18 +127,18 @@ ipv4_set_ttl(_Config) ->
 
 ipv6_single_host(_Config) ->
     [{ok,"ipv6.google.com", {_,_,_,_,_,_,_,_},{_,_,_,_,_,_,_,_}, {_,0,_,_},
-     <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("ipv6.google.com", [inet6]).
+     <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] = gen_icmp:ping("ipv6.google.com", [inet6]).
 
 ipv6_multiple_hosts(_Config) ->
     [{ok,"tunnelbroker.net",
      {_,_,_,_,_,_,_,_},
      {_,_,_,_,_,_,_,_},
      {_,_,_,_},
-      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>},
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
      {ok,"ipv6.google.com",
      {_,_,_,_,_,_,_,_},
      {_,_,_,_,_,_,_,_},
-     {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] =
+     {_,_,_,_}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] =
     gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]).
 
 ipv6_different_request_reply_addresses(_Config) ->
@@ -139,7 +146,7 @@ ipv6_different_request_reply_addresses(_Config) ->
      {0,0,0,0,0,0,0,0},
      {0,0,0,0,0,0,0,1},
      {_,0,_,_},
-      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJK">>}] = gen_icmp:ping("::", [inet6]).
+      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}] = gen_icmp:ping("::", [inet6]).
 
 % Set the socket TTL
 ipv6_set_ttl(_Config) ->
