@@ -379,7 +379,7 @@ proplist_to_record(Options) ->
     Timeout = proplists:get_value(timeout, Options, Default#state.timeout),
 
     Saddr = proplists:get_value(saddr, Options, Saddr),
-    Sport = proplists:get_value(sport, Options, crypto:rand_uniform(16#8000, 16#FFFF)),
+    Sport = proplists:get_value(sport, Options, 16#7FFF + rand:uniform(16#8000)),
     Dport = proplists:get_value(dport, Options, dport(Protocol)),
 
     Next_port = proplists:get_value(next_port, Options, next_port(Protocol)),
