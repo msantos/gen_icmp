@@ -82,7 +82,7 @@ client(Addr, Port) ->
         addr = Addr,
         port = Port,
         is = ICMP,
-        id = crypto:rand_uniform(0, 16#FFFF)
+        id = rand:uniform(16#10000) - 1
     },
     proxy(State).
 
@@ -93,7 +93,7 @@ accept(Addr, ICMP, Listen) ->
         addr = Addr,
         is = ICMP,
         ts = Socket,
-        id = crypto:rand_uniform(0, 16#FFFF)
+        id = rand:uniform(16#10000) - 1
     },
     [{ok, Addr, _Resolved, _ReplyAddr, _, _}] = gen_icmp:ping(ICMP, [Addr], [
             {id, State#state.id},
