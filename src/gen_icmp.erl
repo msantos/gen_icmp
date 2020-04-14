@@ -261,7 +261,7 @@ init_1(Pid, Family, RawOpts, SockOpts0, {ok, FD}) ->
                 s = Socket
             }};
         Error ->
-            Error
+            {stop, Error}
     end;
 init_1(_Pid, _Family, _RawOpts, _SockOpts, Error) ->
     {stop, Error}.
