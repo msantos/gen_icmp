@@ -1,0 +1,8 @@
+[{<<"pkt">>,
+  {git,"git://github.com/msantos/pkt.git",
+       {ref,"8c826b25098b06db8c24805fb1da2d65c14abe06"}},
+  0},
+ {<<"procket">>,
+  {git,"git://github.com/msantos/procket.git",
+       {ref,"f531b951b884972b6eaa619e66113280d79c7830"}},
+  0}].

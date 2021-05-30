@@ -347,7 +347,7 @@ tracert is an Erlang traceroute implementation built using gen_icmp.
 
 ## COMPILING
 
-    $ make
+    rebar3 do clean, compile, ct
 
 Also see the README for procket for additional setup (the procket
 executable needs superuser privileges).
