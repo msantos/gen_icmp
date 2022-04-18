@@ -1,8 +1,11 @@
-[{<<"pkt">>,
-  {git,"git://github.com/msantos/pkt.git",
-       {ref,"8c826b25098b06db8c24805fb1da2d65c14abe06"}},
-  0},
- {<<"procket">>,
-  {git,"git://github.com/msantos/procket.git",
-       {ref,"f531b951b884972b6eaa619e66113280d79c7830"}},
-  0}].
+{"1.2.0",
+[{<<"pkt">>,{pkg,<<"pkt">>,<<"0.5.0">>},0},
+ {<<"procket">>,{pkg,<<"procket">>,<<"0.9.6">>},0}]}.
+[
+{pkg_hash,[
+ {<<"pkt">>, <<"6DC345565DD7E8D80E56C1198E1EE07344F191782D9F1E66ECA50B40C98B1720">>},
+ {<<"procket">>, <<"467014637052CAB030DD32D5269591B82763420C9572F61CD6C5657FE4579777">>}]},
+{pkg_hash_ext,[
+ {<<"pkt">>, <<"C285CD1E5FB850D09F7FD98E1C9E291D1348AB41E4171C78FA99D04E04D84FB2">>},
+ {<<"procket">>, <<"037287B8D10A747E54A69BDCE56724ECC8BE12BCB8233AE4D6F885F0ED71E895">>}]}
+].
