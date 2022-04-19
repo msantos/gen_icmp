@@ -1,4 +1,4 @@
-%% Copyright (c) 2011-2016, Michael Santos <michael.santos@gmail.com>
+%% Copyright (c) 2011-2022, Michael Santos <michael.santos@gmail.com>
 %% All rights reserved.
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -41,44 +41,50 @@
 -include_lib("pkt/include/pkt.hrl").
 
 -export([
-        host/1, host/2, host/3,
-        path/1
-    ]).
+    host/1, host/2, host/3,
+    path/1
+]).
 -export([
-        open/0, open/1,
-        close/1,
-        socket/4,
-        proplist_to_record/1,
-        probe/5,
-        response/1
-    ]).
+    open/0, open/1,
+    close/1,
+    socket/4,
+    proplist_to_record/1,
+    probe/5,
+    response/1
+]).
 
 -export([start_link/1]).
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-        terminate/2, code_change/3]).
-
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -record(state, {
-        pid,
+    pid,
 
-        family = inet,
-        protocol = icmp,
-        ttl = 1,
-        max_hops = 31,
-        timeout = 1000,         % 1 second
+    family = inet,
+    protocol = icmp,
+    ttl = 1,
+    max_hops = 31,
+    % 1 second
+    timeout = 1000,
 
-        packet,
-        handler,
-        dport = 0,
-        sport = 0,
-        next_port,
+    packet,
+    handler,
+    dport = 0,
+    sport = 0,
+    next_port,
 
-        saddr = {0,0,0,0},
-        daddr,
-        ws,
-        rs
-    }).
+    saddr = {0, 0, 0, 0},
+    daddr,
+    ws,
+    rs
+}).
 
 -ifndef(PF_INET6).
 -define(PF_INET6, family(inet6)).
@@ -99,10 +105,9 @@ host(Host, Options) ->
 host(Ref, Host, Options) ->
     State = proplist_to_record(Options),
     #state{family = Family} = State,
-    {ok, [Daddr|_]} = gen_icmp:parse(Family, Host),
+    {ok, [Daddr | _]} = gen_icmp:parse(Family, Host),
     ok = gen_server:call(Ref, {handler, State#state.handler}, infinity),
     trace(Ref, State#state{daddr = Daddr}).
-
 
 trace(Ref, State) ->
     flush_events(Ref),
@@ -117,7 +122,8 @@ trace(_Ref, #state{ttl = 0}, Acc) ->
 % Max hops reached
 trace(_Ref, #state{ttl = TTL, max_hops = TTL}, Acc) ->
     lists:reverse(Acc);
-trace(Ref,
+trace(
+    Ref,
     #state{
         daddr = Daddr,
         dport = Dport,
@@ -130,8 +136,9 @@ trace(Ref,
         next_port = Next,
 
         timeout = Timeout
-    } = State0, Acc) ->
-
+    } = State0,
+    Acc
+) ->
     State = State0#state{dport = Next(Dport)},
     Packet = Fun({Saddr, Sport}, {Daddr, Dport}, TTL),
     ok = probe(Ref, Daddr, Dport, TTL, Packet),
@@ -142,79 +149,90 @@ trace(Ref,
     receive
         % Response from destination
         {icmp, Ref, Daddr, {_, Data}} ->
-            trace(Ref, State#state{ttl = 0},
-                [{Daddr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
-
+            trace(
+                Ref,
+                State#state{ttl = 0},
+                [{Daddr, gen_icmp:timediff(Now), {icmp, Data}} | Acc]
+            );
         % Response from intermediate host
         % IPv4 ICMP payload
-        {icmp, Ref, {_,_,_,_} = Addr, {icmp, <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes,
-                _Type:8, _Code:8, _Checksum:16, Sport:16, _/binary>> = Data}} ->
-            trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
-
+        {icmp, Ref, {_, _, _, _} = Addr,
+            {icmp,
+                <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes, _Type:8, _Code:8, _Checksum:16,
+                    Sport:16, _/binary>> = Data}} ->
+            trace(
+                Ref,
+                State#state{ttl = TTL + 1},
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}} | Acc]
+            );
         % IPv6 ICMP payload
-        {icmp, Ref, {_,_,_,_,_,_,_,_} = Addr, {icmp, <<_ICMPHeader:8/bytes, _IPv6Header:40/bytes,
-                _Type:8, _Code:8, _Checksum:16, Sport:16, _/binary>> = Data}} ->
-            trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
-
+        {icmp, Ref, {_, _, _, _, _, _, _, _} = Addr,
+            {icmp,
+                <<_ICMPHeader:8/bytes, _IPv6Header:40/bytes, _Type:8, _Code:8, _Checksum:16,
+                    Sport:16, _/binary>> = Data}} ->
+            trace(
+                Ref,
+                State#state{ttl = TTL + 1},
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}} | Acc]
+            );
         % IPv4 UDP payload
-        {icmp, Ref, {_,_,_,_} = Addr, {udp, <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes,
-                Sport:16, _/binary>> = Data}} ->
-            trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
-
+        {icmp, Ref, {_, _, _, _} = Addr,
+            {udp, <<_ICMPHeader:8/bytes, _IPv4Header:20/bytes, Sport:16, _/binary>> = Data}} ->
+            trace(
+                Ref,
+                State#state{ttl = TTL + 1},
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}} | Acc]
+            );
         % IPv6 UDP payload
-        {icmp, Ref, {_,_,_,_,_,_,_,_} = Addr, {udp, <<_ICMPHeader:8/bytes, _IPv6Header:40/bytes,
-                _Sport:16, _/binary>> = Data}} ->
-            trace(Ref, State#state{ttl = TTL+1},
-                [{Addr, gen_icmp:timediff(Now), {icmp, Data}}|Acc]);
-
+        {icmp, Ref, {_, _, _, _, _, _, _, _} = Addr,
+            {udp, <<_ICMPHeader:8/bytes, _IPv6Header:40/bytes, _Sport:16, _/binary>> = Data}} ->
+            trace(
+                Ref,
+                State#state{ttl = TTL + 1},
+                [{Addr, gen_icmp:timediff(Now), {icmp, Data}} | Acc]
+            );
         % Response from protocol handler
         {tracert, Ref, Saddr, Data} ->
-            trace(Ref, State#state{ttl = 0},
-                [{Saddr, gen_icmp:timediff(Now), Data}|Acc])
-    after
-        Timeout ->
-            trace(Ref, State#state{ttl = TTL+1}, [timeout|Acc])
+            trace(
+                Ref,
+                State#state{ttl = 0},
+                [{Saddr, gen_icmp:timediff(Now), Data} | Acc]
+            )
+    after Timeout ->
+        trace(Ref, State#state{ttl = TTL + 1}, [timeout | Acc])
     end.
-
 
 probe(Ref, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
     gen_server:call(Ref, {send, Daddr, Dport, TTL, Packet}, infinity).
-
 
 open() ->
     open([]).
 open(Options) ->
     start_link(Options).
 
-
 close(Ref) ->
     gen_server:call(Ref, close).
-
 
 path(Path) when is_list(Path) ->
     path(Path, [response(icmp)]).
 
 path(Path, []) ->
     Path;
-path(Path, [Fun|Funs]) when is_list(Path), is_function(Fun) ->
+path(Path, [Fun | Funs]) when is_list(Path), is_function(Fun) ->
     Mapped = lists:map(Fun, Path),
     path(Mapped, Funs).
 
-
 response(icmp) ->
-    fun({{_,_,_,_} = Saddr, Microsec, {icmp, Packet}}) ->
+    fun
+        ({{_, _, _, _} = Saddr, Microsec, {icmp, Packet}}) ->
             ICMP = icmp_to_atom(inet, Packet),
             {Saddr, Microsec, ICMP};
-       ({{_,_,_,_,_,_,_,_} = Saddr, Microsec, {icmp, Packet}}) ->
+        ({{_, _, _, _, _, _, _, _} = Saddr, Microsec, {icmp, Packet}}) ->
             ICMP = icmp_to_atom(inet6, Packet),
             {Saddr, Microsec, ICMP};
         (N) ->
             N
     end.
-
 
 %%-------------------------------------------------------------------------
 %%% Callbacks
@@ -246,40 +264,60 @@ init([Pid, Options]) ->
     ),
 
     {ok, State#state{
-            pid = Pid,
-            ws = WS,
-            rs = RS
-        }}.
+        pid = Pid,
+        ws = WS,
+        rs = RS
+    }}.
 
-handle_call(close, {Pid,_}, #state{pid = Pid} = State) ->
+handle_call(close, {Pid, _}, #state{pid = Pid} = State) ->
     {stop, normal, ok, State};
 handle_call(sport, _From, #state{sport = Sport} = State) ->
     {reply, Sport, State};
-handle_call({send, {DA1,DA2,DA3,DA4}, Dport, TTL, Packet},
-            _From, #state{ws = Socket} = State) ->
+handle_call(
+    {send, {DA1, DA2, DA3, DA4}, Dport, TTL, Packet},
+    _From,
+    #state{ws = Socket} = State
+) ->
     Sockaddr = <<
         (procket:sockaddr_common(?PF_INET, 16))/binary,
-        Dport:16,                   % Destination Port
-        DA1,DA2,DA3,DA4,            % IPv4 address
+        % Destination Port
+        Dport:16,
+        % IPv4 address
+        DA1,
+        DA2,
+        DA3,
+        DA4,
         0:64
     >>,
     ok = gen_icmp:set_ttl(Socket, inet, TTL),
     {reply, procket:sendto(Socket, Packet, 0, Sockaddr), State};
-handle_call({send, {DA1,DA2,DA3,DA4,DA5,DA6,DA7,DA8}, Dport, TTL, Packet},
-            _From, #state{ws = Socket} = State) ->
+handle_call(
+    {send, {DA1, DA2, DA3, DA4, DA5, DA6, DA7, DA8}, Dport, TTL, Packet},
+    _From,
+    #state{ws = Socket} = State
+) ->
     Sockaddr = <<
         (procket:sockaddr_common(?PF_INET6, 16))/binary,
-        Dport:16,                           % Destination Port
-        0:32,                               % Flow info
-        DA1:16,DA2:16,DA3:16,DA4:16,        % IPv6 address
-         DA5:16,DA6:16,DA7:16,DA8:16,
-        0:32                                % Scope ID
+        % Destination Port
+        Dport:16,
+        % Flow info
+        0:32,
+        % IPv6 address
+        DA1:16,
+        DA2:16,
+        DA3:16,
+        DA4:16,
+        DA5:16,
+        DA6:16,
+        DA7:16,
+        DA8:16,
+        % Scope ID
+        0:32
     >>,
     ok = gen_icmp:set_ttl(Socket, inet6, TTL),
     {reply, procket:sendto(Socket, Packet, 0, Sockaddr), State};
 handle_call({handler, _Handler}, _From, State) ->
     {reply, ok, State};
-
 handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
     {reply, ok, State}.
@@ -288,17 +326,21 @@ handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
-handle_info({icmp, Socket, Daddr, _TTL, Data}, #state{pid = Pid, rs = Socket,
-        protocol = Protocol} = State) ->
+handle_info(
+    {icmp, Socket, Daddr, _TTL, Data},
+    #state{
+        pid = Pid,
+        rs = Socket,
+        protocol = Protocol
+    } = State
+) ->
     Pid ! {icmp, self(), Daddr, {Protocol, Data}},
     {noreply, State};
 handle_info({tracert, Daddr, Data}, #state{pid = Pid} = State) ->
     Pid ! {tracert, self(), Daddr, Data},
     {noreply, State};
-
-handle_info({'EXIT',_,normal}, State) ->
+handle_info({'EXIT', _, normal}, State) ->
     {noreply, State};
-
 handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
@@ -311,16 +353,16 @@ terminate(_Reason, #state{rs = RS, ws = WS}) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-
 %%-------------------------------------------------------------------------
 %%% Utility Functions
 %%-------------------------------------------------------------------------
 socket(Family, Protocol0, Saddr, Sport) ->
-    {Protocol, Type, Port} = case {Family, Protocol0} of
-        {inet, icmp} -> {icmp, raw, 0};
-        {inet6, icmp} -> {'ipv6-icmp', raw, 0};
-        {_, udp} -> {udp, dgram, Sport}
-    end,
+    {Protocol, Type, Port} =
+        case {Family, Protocol0} of
+            {inet, icmp} -> {icmp, raw, 0};
+            {inet6, icmp} -> {'ipv6-icmp', raw, 0};
+            {_, udp} -> {udp, dgram, Sport}
+        end,
 
     open_socket(Family, Type, Protocol, Saddr, Port).
 
@@ -339,24 +381,42 @@ open_socket(Family, Type, Protocol, Saddr, Sport) ->
             Error
     end.
 
-bind_socket(Socket, inet, {SA1,SA2,SA3,SA4}, Sport) ->
-    Sockaddr = <<(procket:sockaddr_common(?PF_INET, 16))/binary,
-        Sport:16,           % Source port
-        SA1,SA2,SA3,SA4,    % IPv4 address
-        0:64>>,
+bind_socket(Socket, inet, {SA1, SA2, SA3, SA4}, Sport) ->
+    Sockaddr = <<
+        (procket:sockaddr_common(?PF_INET, 16))/binary,
+        % Source port
+        Sport:16,
+        % IPv4 address
+        SA1,
+        SA2,
+        SA3,
+        SA4,
+        0:64
+    >>,
 
     case procket:bind(Socket, Sockaddr) of
         ok -> {ok, Socket};
         Error -> Error
     end;
-bind_socket(Socket, inet6, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8}, Sport) ->
-    Sockaddr = <<(procket:sockaddr_common(?PF_INET6, 16))/binary,
-        Sport:16,                       % Source port
-        0:32,                           % IPv6 flow information
-        SA1:16,SA2:16,SA3:16,SA4:16,    % IPv6 address
-        SA5:16,SA6:16,SA7:16,SA8:16,
-        0:32                            % IPv6 scope id
-        >>,
+bind_socket(Socket, inet6, {SA1, SA2, SA3, SA4, SA5, SA6, SA7, SA8}, Sport) ->
+    Sockaddr = <<
+        (procket:sockaddr_common(?PF_INET6, 16))/binary,
+        % Source port
+        Sport:16,
+        % IPv6 flow information
+        0:32,
+        % IPv6 address
+        SA1:16,
+        SA2:16,
+        SA3:16,
+        SA4:16,
+        SA5:16,
+        SA6:16,
+        SA7:16,
+        SA8:16,
+        % IPv6 scope id
+        0:32
+    >>,
 
     case procket:bind(Socket, Sockaddr) of
         ok -> {ok, Socket};
@@ -366,10 +426,11 @@ bind_socket(Socket, inet6, {SA1,SA2,SA3,SA4,SA5,SA6,SA7,SA8}, Sport) ->
 proplist_to_record(Options) ->
     Default = #state{},
 
-    {Family, Saddr} = case proplists:get_value(inet6, Options, false) of
-        true -> {inet6, {0,0,0,0,0,0,0,0}};
-        false -> {Default#state.family, Default#state.saddr}
-    end,
+    {Family, Saddr} =
+        case proplists:get_value(inet6, Options, false) of
+            true -> {inet6, {0, 0, 0, 0, 0, 0, 0, 0}};
+            false -> {Default#state.family, Default#state.saddr}
+        end,
     Protocol = proplists:get_value(protocol, Options, Default#state.protocol),
     Packet = proplists:get_value(packet, Options, protocol(Protocol)),
     Handler = proplists:get_value(handler, Options, Default#state.handler),
@@ -402,19 +463,27 @@ proplist_to_record(Options) ->
         next_port = Next_port
     }.
 
-
 %%-------------------------------------------------------------------------
 %%% Internal Functions
 %%-------------------------------------------------------------------------
 icmp_to_atom(inet, ICMP) when is_binary(ICMP) ->
-    {#icmp{type = Type,
-        code = Code}, _Payload} = pkt:icmp(ICMP),
-    icmp_message:code({Type,  Code});
+    {
+        #icmp{
+            type = Type,
+            code = Code
+        },
+        _Payload
+    } = pkt:icmp(ICMP),
+    icmp_message:code({Type, Code});
 icmp_to_atom(inet6, ICMP) when is_binary(ICMP) ->
-    {#icmp6{type = Type,
-        code = Code}, _Payload} = pkt:icmp6(ICMP),
-    icmp6_message:code({Type,  Code}).
-
+    {
+        #icmp6{
+            type = Type,
+            code = Code
+        },
+        _Payload
+    } = pkt:icmp6(ICMP),
+    icmp6_message:code({Type, Code}).
 
 %%
 %% Construct the protocol headers for the probe
@@ -427,12 +496,12 @@ protocol(udp) ->
     end;
 % Default ICMP echo packet
 protocol(icmp) ->
-    fun({{_,_,_,_}, Sport}, {_Daddr, _Dport}, _TTL) ->
-        gen_icmp:echo(inet, Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>);
-       ({{_,_,_,_,_,_,_,_}, Sport}, {_Daddr, _Dport}, _TTL) ->
-        gen_icmp:echo(inet6, Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
+    fun
+        ({{_, _, _, _}, Sport}, {_Daddr, _Dport}, _TTL) ->
+            gen_icmp:echo(inet, Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>);
+        ({{_, _, _, _, _, _, _, _}, Sport}, {_Daddr, _Dport}, _TTL) ->
+            gen_icmp:echo(inet6, Sport, 0, <<(list_to_binary(lists:seq($\s, $W)))/binary>>)
     end.
-
 
 %%
 %% Calculate the port for different protocol types
@@ -441,24 +510,22 @@ dport(udp) -> 1 bsl 15 + 666;
 dport(icmp) -> 0.
 
 next_port(udp) ->
-    fun(N) -> N+1 end;
+    fun(N) -> N + 1 end;
 next_port(_) ->
     fun(N) -> N end.
-
 
 flush_events(Ref) ->
     receive
         {Event, Ref, _Addr, _Data} when Event == icmp; Event == tracert ->
             flush_events(Ref)
-    after
-            0 -> ok
+    after 0 -> ok
     end.
 
 family(inet6) ->
     case os:type() of
-        {unix,darwin} -> 30;
-        {unix,freebsd} -> 28;
-        {unix,linux} -> 10;
-        {unix,netbsd} -> 24;
-        {unix,openbsd} -> 24
+        {unix, darwin} -> 30;
+        {unix, freebsd} -> 28;
+        {unix, linux} -> 10;
+        {unix, netbsd} -> 24;
+        {unix, openbsd} -> 24
     end.
