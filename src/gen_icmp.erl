@@ -699,7 +699,13 @@ ipv6_unicast_hops() ->
         {unix, _} -> 4
     end.
 
-icmp6_filter() -> 1.
+icmp6_filter() ->
+    case erlang:system_info(os_type) of
+        {unix, linux} ->
+            1;
+        {unix, _} ->
+            18
+    end.
 
 % IPv6 ICMP filtering
 %
