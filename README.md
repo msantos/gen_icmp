@@ -323,7 +323,7 @@ tracert is an Erlang traceroute implementation built using gen_icmp.
 
         The return value is an ordered list of tuples:
 
-            Adddress: the source address responding to the probe
+            Address: the source address responding to the probe
 
             MicroSeconds: time elapsed between the probe and receiving
             the response
@@ -342,7 +342,7 @@ tracert is an Erlang traceroute implementation built using gen_icmp.
                 UDP = unreach_port | ...
 
         Convert the list of binaries returned by host/1,2,3 to atoms
-        representing the ICMP reponse codes and UDP errors.
+        representing the ICMP response codes and UDP errors.
 
 
 ## COMPILING
