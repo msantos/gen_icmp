@@ -110,6 +110,44 @@
 %%-------------------------------------------------------------------------
 %%% API
 %%-------------------------------------------------------------------------
+%% @doc Open an ICMP socket
+%%
+%% By default, the ICMP socket is opened in {active,false} mode. No
+%% packets will be received by the socket. setopts/2 can be used
+%% to place the socket in {active,true} mode.
+%%
+%% See the procket README for the raw socket options and for
+%% instructions on setting up the setuid helper.
+%%
+%% gen_icmp first attempts to natively open the socket and falls
+%% back to forking the setuid helper program if beam does not have
+%% the appropriate privileges.  Privileges to open a raw socket can
+%% be given by, for example, running as root or, on Linux, granting
+%% the CAP_NET_RAW capability to beam:
+%%
+%%     setcap cap_net_raw=ep /usr/local/lib/erlang/erts-5.8.3/bin/beam.smp
+%%
+%% Only the owning process will receive ICMP packets (see
+%% controlling_process/2 to change the owner). The process owning the
+%% raw socket will receive all ICMP packets sent to the host.
+%%
+%% Messages sent to the controlling process are:
+%%
+%% {icmp, Socket, Address, TTL, Packet}
+%%
+%% Where:
+%%
+%%     * Socket is the pid of the gen_icmp process
+%%
+%%     * Address is a tuple representing the IPv4 or IPv6 source address
+%%
+%%     * TTL: IPv4: TTL taken from the IP header
+%%
+%%     * TTL: IPv6: the socket's hop limit returned from
+%%       getsockopt(IPV6_UNICAST_HOPS) (this is not the packet's
+%%       TTL, it is the socket's max TTL)
+%%
+%%     * Packet is the complete ICMP packet including the ICMP headers
 open() ->
     open([], []).
 open(RawOpts) ->
@@ -117,20 +155,49 @@ open(RawOpts) ->
 open(RawOpts, SockOpts) ->
     start_link(RawOpts, SockOpts).
 
+%% @doc Close the ICMP socket
 close(Ref) when is_pid(Ref) ->
     gen_server:call(Ref, close, infinity).
 
+%% @doc Send data via an ICMP socket
+%%
+%% Like the gen_udp and gen_tcp modules, any process can send ICMP
+%% packets but only the owner will receive the responses.
 send(Ref, Address, Packet) when is_pid(Ref) ->
     gen_server:call(Ref, {send, Address, Packet}, infinity).
 
+%% @doc Read data from an ICMP socket
+%%
+%% This function receives a packet from a socket in passive mode.
+%%
+%% The optional Timeout parameter specifies a timeout in
+%% milliseconds. The default value is infinity.
 recv(Ref, Length) ->
     recv(Ref, Length, infinity).
 recv(Ref, Length, Timeout) ->
     gen_server:call(Ref, {recv, Length, Timeout}, infinity).
 
+%% @doc Change the controlling process of the ICMP socket
+%%
+%% Change the process owning the socket. Allows another process to
+%% receive the ICMP responses.
 controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
     gen_server:call(Ref, {controlling_process, Pid}, infinity).
 
+%% @doc Set socket options
+%%
+%% For options, see the inet man page. Simply calls inet:setopts/2 on
+%% the gen_udp socket.
+%%
+%% setopts/2 can be used to toggle the socket between passive and
+%% active mode:
+%%
+%% ```
+%% {ok, Socket} = gen_icmp:open(), % socket is {active,false}
+%% ok = gen_icmp:setopts(Socket, [{active, true}]),
+%% % do stuff with the socket
+%% ok = gen_icmp:setopts(Socket, [{active, false}]).
+%% '''
 setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
     gen_server:call(Ref, {setopts, Options}, infinity).
 
@@ -158,6 +225,62 @@ ping(Hosts, Options) ->
     gen_icmp:close(Socket),
     Res.
 
+%% @doc Send an ICMP ECHO_REQUEST
+%%
+%% ping/1 is a convenience function to send a single ping
+%% packet. The argument to ping/1 can be either a hostname or a
+%% list of hostnames.
+%%
+%% To prevent the process mailbox from being flooded with ICMP
+%% messages, ping/3 will put the socket into {active,false} mode
+%% after completing.
+%%
+%% The ping/3 function blocks until either an ICMP ECHO REPLY is
+%% received from all hosts or Timeout is reached.
+%%
+%% Id and sequence are used to differentiate ping responses. Usually,
+%% the sequence is incremented for each ping in one run.
+%%
+%% A list of responses is returned. If the ping was successful,
+%% the elapsed time in milliseconds is included (calculated by
+%% subtracting the current time from the time we sent in the ICMP
+%% ECHO packet and returned to us in the ICMP ECHOREPLY payload)
+%% where:
+%%
+%% * Host: the provided hostname
+%%
+%% * Address: the resolved IPv4 or IPv6 network address represented
+%%   as a 4 or 8-tuple used in the ICMP echo request
+%%
+%% * ReplyAddr: the IPv4 or IPv6 network address originating the
+%%   ICMP echo reply
+%%
+%% The timeout is set for all ICMP packets and is set after all
+%% packets have been sent out.
+%%
+%% ping/1 and ping/2 open and close an ICMP socket for the user. For
+%% best performance, ping/3 should be used instead, with the socket
+%% being maintained between runs.
+%%
+%% By default only one address per hostname is pinged. To
+%% enable pinging all addresses per hostname pass {multi, true}
+%% to options.
+%%
+%% A ping payload contains an 8 byte timestamp in microseconds. When
+%% creating a custom payload, the first 8 bytes of the ICMP echo
+%% reply payload will be used for calculating the elapsed time. To
+%% disable this behaviour, use the option {timestamp,false} (the
+%% elapsed time in the return value will be set to 0).
+%%
+%% The timeout defaults to 5 seconds.
+%%
+%% ICMPv6 sockets can restrict which ICMPv6 types are received by the
+%% socket using the filter option.  The filter argument is a binary
+%% generated using the icmp6_filter functions described below.
+%%
+%% The default filter allows: ICMP6_ECHO_REPLY, ICMP6_DST_UNREACH,
+%% ICMP6_PACKET_TOO_BIG, ICMP6_TIME_EXCEEDED and ICMP6_PARAM_PROB.
+%% Note: ping/3 does not restore the original filter on the socket.
 ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Options) ->
     ok = setopts(Socket, [{active, true}]),
 

@@ -1,4 +1,3 @@
-
 gen\_icmp aspires to be a simple interface for using ICMP and ICMPv6
 sockets in Erlang, just like gen\_tcp and gen\_udp do for their protocol
 types; incidentally messing up Google searches for whomever someday
@@ -56,7 +55,7 @@ version. If you just need a simple example of sending a ping, also see:
             * Address is a tuple representing the IPv4 or IPv6 source address
 
             * TTL is the IP TTL
-                * IPv4: TTL take from the IP header
+                * IPv4: TTL taken from the IP header
                 * IPv6: the socket's hop limit returned from
                   getsockopt(IPV6_UNICAST_HOPS) (this is not the packet's
                   TTL, it is the socket's max TTL)
@@ -93,7 +92,7 @@ version. If you just need a simple example of sending a ping, also see:
         This function receives a packet from a socket in passive mode.
 
         The optional Timeout parameter specifies a timeout in
-        milliseconds. The default value is infinity .
+        milliseconds. The default value is infinity.
 
     controlling_process(Socket, Pid) -> ok
 
