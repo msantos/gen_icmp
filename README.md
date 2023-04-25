@@ -132,7 +132,7 @@ version. If you just need a simple example of sending a ping, also see:
                     {timestamp, boolean()} | {ttl, TTL} | {filter, Filter} | inet | inet6
                 Id = uint16()
                 Sequence = uint16()
-                Timeout = int()
+                Timeout = non_neg_integer() | infinity
                 TTL = uint8()
                 Data = binary()
                 Filter = binary()

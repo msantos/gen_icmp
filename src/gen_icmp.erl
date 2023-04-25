@@ -702,11 +702,22 @@ parse_or_resolve(Family, Addr, {error, einval}) ->
 
 ping_reply(Hosts, #ping_opt{s = Socket, timeout = Timeout} = Opt) ->
     Pid = self(),
-    TRef = erlang:send_after(Timeout, Pid, {icmp, Socket, timeout}),
+    TRef =
+        case Timeout of
+            infinity ->
+                infinity;
+            _ ->
+                erlang:send_after(Timeout, Pid, {icmp, Socket, timeout})
+        end,
     ping_loop(Hosts, [], Opt#ping_opt{tref = TRef}).
 
+cancel_timeout(infinity) ->
+    false;
+cancel_timeout(TRef) ->
+    erlang:cancel_timer(TRef).
+
 ping_loop([], Acc, #ping_opt{tref = TRef}) ->
-    erlang:cancel_timer(TRef),
+    cancel_timeout(TRef),
     {[], Acc};
 ping_loop(
     Hosts,
@@ -804,7 +815,7 @@ ping_loop(
             ping_loop(Hosts2, Result, Opt);
         % IPv4/IPv6 timeout on socket
         {icmp, Socket, timeout} ->
-            erlang:cancel_timer(TRef),
+            cancel_timeout(TRef),
             Timeouts = [{error, timeout, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts],
             {Timeouts, Acc}
     end.
