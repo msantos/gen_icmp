@@ -33,8 +33,6 @@
 -include_lib("kernel/include/inet.hrl").
 -include_lib("pkt/include/pkt.hrl").
 
--define(SERVER, ?MODULE).
-
 -define(PING_TIMEOUT, 5000).
 
 -export([
@@ -79,15 +77,17 @@
     code_change/3
 ]).
 
+-type fd() :: -16#7fffffff..16#7fffffff.
+
 -record(state, {
     % Protocol family (inet, inet6)
-    family = inet,
+    family = inet :: inet | inet6,
     % caller PID
-    pid,
+    pid :: pid(),
     % socket file descriptor
-    fd,
+    fd :: fd(),
     % udp socket
-    s
+    s :: gen_udp:socket()
 }).
 
 -record(ping_opt, {
@@ -107,9 +107,6 @@
     h = #icmp6{}
 }).
 
-%%-------------------------------------------------------------------------
-%%% API
-%%-------------------------------------------------------------------------
 %% @doc Open an ICMP socket
 %%
 %% By default, the ICMP socket is opened in {active,false} mode. No
@@ -367,10 +364,12 @@ ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Option
 %%-------------------------------------------------------------------------
 %%% Callbacks
 %%-------------------------------------------------------------------------
+%% @private
 start_link(RawOpts, SockOpts) ->
     Pid = self(),
     gen_server:start_link(?MODULE, [Pid, RawOpts, SockOpts], []).
 
+%% @private
 start(RawOpts, SockOpts) ->
     Pid = self(),
     case gen_server:start(?MODULE, [Pid, RawOpts, SockOpts], []) of
@@ -378,6 +377,7 @@ start(RawOpts, SockOpts) ->
         {error, Error} -> Error
     end.
 
+%% @private
 init([Pid, RawOpts, SockOpts]) ->
     process_flag(trap_exit, true),
 
@@ -425,6 +425,7 @@ init_1(Pid, Family, RawOpts, SockOpts0, {ok, FD}) ->
 init_1(_Pid, _Family, _RawOpts, _SockOpts, Error) ->
     {stop, Error}.
 
+%% @private
 handle_call(close, {Pid, _}, #state{pid = Pid, s = Socket} = State) ->
     {stop, normal, gen_udp:close(Socket), State};
 handle_call({send, IP, Packet}, _From, #state{s = Socket} = State) ->
@@ -458,10 +459,12 @@ handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
     {reply, error, State}.
 
+%% @private
 handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
+%% @private
 % IPv4 ICMP
 handle_info(
     {udp, Socket, {_, _, _, _} = Saddr, 0,
@@ -493,10 +496,12 @@ handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
 
+%% @private
 terminate(_Reason, #state{fd = Socket}) ->
     procket:close(Socket),
     ok.
 
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
@@ -741,7 +746,7 @@ cancel_timeout(TRef) ->
     erlang:cancel_timer(TRef).
 
 ping_loop([], Acc, #ping_opt{tref = TRef}) ->
-    cancel_timeout(TRef),
+    _ = cancel_timeout(TRef),
     {[], Acc};
 ping_loop(
     Hosts,
@@ -839,7 +844,7 @@ ping_loop(
             ping_loop(Hosts2, Result, Opt);
         % IPv4/IPv6 timeout on socket
         {icmp, Socket, timeout} ->
-            cancel_timeout(TRef),
+            _ = cancel_timeout(TRef),
             Timeouts = [{error, timeout, Addr, IP} || {ok, Addr, IP, _Seq} <- Hosts],
             {Timeouts, Acc}
     end.
@@ -858,7 +863,7 @@ ipv6_unicast_hops() ->
     end.
 
 icmp6_filter() ->
-    case erlang:system_info(os_type) of
+    case os:type() of
         {unix, linux} ->
             1;
         {unix, _} ->
@@ -869,7 +874,7 @@ icmp6_filter() ->
 %
 % Linux reverses the meaning of the macros in RFC3542
 icmp6_filter_setpassall() ->
-    case erlang:system_info(os_type) of
+    case os:type() of
         {unix, linux} ->
             <<0:256>>;
         {unix, _} ->
@@ -879,7 +884,7 @@ icmp6_filter_setpassall() ->
     end.
 
 icmp6_filter_setblockall() ->
-    case erlang:system_info(os_type) of
+    case os:type() of
         {unix, linux} ->
             <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
                 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
@@ -910,7 +915,7 @@ icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
     Fun =
-        case erlang:system_info(os_type) of
+        case os:type() of
             {unix, linux} ->
                 fun(N) -> N band bnot Value end;
             {unix, _} ->
@@ -925,7 +930,7 @@ icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
     Fun =
-        case erlang:system_info(os_type) of
+        case os:type() of
             {unix, linux} ->
                 fun(N) -> N bor Value end;
             {unix, _} ->
@@ -940,7 +945,7 @@ icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
     El = array_get(Offset, Filter),
-    case erlang:system_info(os_type) of
+    case os:type() of
         {unix, linux} -> El band Value =:= 0;
         {unix, _} -> El band Value =/= 0
     end.
@@ -952,7 +957,7 @@ icmp6_filter_willblock(Type0, <<_:256>> = Filter) ->
     Offset = Type bsr 5,
     Value = 1 bsl (Type band 31),
     El = array_get(Offset, Filter),
-    case erlang:system_info(os_type) of
+    case os:type() of
         {unix, linux} -> El band Value =/= 0;
         {unix, _} -> El band Value =:= 0
     end.
