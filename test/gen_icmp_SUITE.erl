@@ -126,23 +126,31 @@ ipv4_all_addresses(_Config) ->
 % Order should be deterministic, since localhost will respond faster
 % than a remote host
 reuse_socket(_Config) ->
+    {Localhost, Lo} =
+        case os:type() of
+            {unix, linux} ->
+                {"127.0.1.1", {127, 0, 1, 1}};
+            {unix, _} ->
+                {"127.0.0.1", {127, 0, 0, 1}}
+        end,
+
     {ok, Socket} = gen_icmp:open(),
 
     [
         {ok, "www.google.com", {_, _, _, _}, {_, _, _, _}, {_, _, _, _},
             <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
-        {ok, "127.0.1.1", {127, 0, 1, 1}, {127, 0, 1, 1}, {_, _, _, _},
+        {ok, Localhost, Lo, Lo, {_, _, _, _},
             <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
     ] =
-        gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
+        gen_icmp:ping(Socket, [Localhost, "www.google.com"], []),
 
     [
         {ok, "www.google.com", {_, _, _, _}, {_, _, _, _}, {_, _, _, _},
             <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
-        {ok, "127.0.1.1", {127, 0, 1, 1}, {127, 0, 1, 1}, {_, _, _, _},
+        {ok, Localhost, Lo, Lo, {_, _, _, _},
             <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
     ] =
-        gen_icmp:ping(Socket, ["127.0.1.1", "www.google.com"], []),
+        gen_icmp:ping(Socket, [Localhost, "www.google.com"], []),
 
     ok = gen_icmp:close(Socket).
 
@@ -154,8 +162,9 @@ nxdomain(_Config) ->
 
 % Set the socket TTL
 ipv4_set_ttl(_Config) ->
+    Hops = list_to_integer(getenv("GEN_ICMP_TEST_IPV4_TTL", "1")),
     [{error, timxceed_intrans, "www.google.com", {_, _, _, _}, {_, _, _, _}, {_, _, TTL, _}, _}] = gen_icmp:ping(
-        "www.google.com", [{ttl, 1}]
+        "www.google.com", [{ttl, Hops}]
     ),
     true = TTL > 0.
 
@@ -175,17 +184,23 @@ ipv6_multiple_hosts(_Config) ->
         gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]).
 
 ipv6_different_request_reply_addresses(_Config) ->
-    [
-        {ok, "::", {0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1}, {_, 0, _, _},
-            <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
-    ] = gen_icmp:ping("::", [inet6]).
+    case os:type() of
+        {unix, linux} ->
+            [
+                {ok, "::", {0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1}, {_, 0, _, _},
+                    <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
+            ] = gen_icmp:ping("::", [inet6]);
+        {unix, _} ->
+            {skip, "not supported"}
+    end.
 
 % Set the socket TTL
 ipv6_set_ttl(_Config) ->
+    Hops = list_to_integer(getenv("GEN_ICMP_TEST_IPV6_TTL", getenv("GEN_ICMP_TEST_IPV4_TTL", "1"))),
     [
         {error, unreach_net, "www.google.com", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _},
             {_, _, _, _}, _}
-    ] = gen_icmp:ping("www.google.com", [inet6, {ttl, 1}]).
+    ] = gen_icmp:ping("www.google.com", [inet6, {ttl, Hops}]).
 
 % ICMPv6 filter tests
 ipv6_filter_gen(_Config) ->
@@ -244,3 +259,9 @@ ipv6_filter_echo(_Config) ->
     ),
 
     ok = gen_icmp:close(Socket).
+
+getenv(Name, Default) ->
+    case os:getenv(Name) of
+        false -> Default;
+        Env -> Env
+    end.
