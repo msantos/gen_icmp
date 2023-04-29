@@ -28,12 +28,12 @@
 %%% NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 %%% SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-%%%
-%%% traceroute
-%%%
-%%% Send a probe packet with the time to live set from 1. Monitor
-%%% an ICMP socket for ICMP responses or timeout.
-%%%
+%%
+%% traceroute
+%%
+%% Send a probe packet with the time to live set from 1. Monitor
+%% an ICMP socket for ICMP responses or timeout.
+%%
 -module(tracert).
 -behaviour(gen_server).
 
@@ -89,12 +89,41 @@
 -define(PF_INET6, family(inet6)).
 -endif.
 
-%%-------------------------------------------------------------------------
-%%% API
-%%-------------------------------------------------------------------------
+% @doc Perform a traceroute to a destination.
 host(Host) ->
     host(Host, []).
 
+% @doc Perform a traceroute to a destination with options.
+%
+% ICMP and UDP probes are supported. ICMP probes are the default.
+%
+% max_hops is the maximum TTL (default: 30)
+%
+% Set the time in milliseconds to wait for a response using the
+% timeout option (default: 1000 ms).  WARNING: if the response
+% arrives after the timeout, tracert will insert spurious entries
+% into the path.
+%
+% tracert will not spawn the setuid helper if the {setuid, false}
+% option is used. In this case, beam must either be running as
+% root or have the cap_net_raw privileges under Linux.
+%
+% The {sport, Port} option sets the initial source port for UDP
+% probes. The port will be incremented by 1 for each subsequent
+% probe (default: random high port).  For ICMP probes, the ICMP
+% ID field will be set to this value.
+%
+% The return value is an ordered list of tuples:
+%
+% * Address: the source address responding to the probe
+%
+% * MicroSeconds: time elapsed between the probe and receiving
+%   the response
+%
+% * Protocol: icmp or udp
+%
+% * Protocol data: a binary representing the received packet
+%   contents
 host(Host, Options) ->
     {ok, Socket} = open(Options),
     Path = host(Socket, Host, Options),
@@ -212,6 +241,10 @@ open(Options) ->
 close(Ref) ->
     gen_server:call(Ref, close).
 
+% @doc Convert trace response to atoms.
+%
+% Convert the list of binaries returned by host/1,2,3 to atoms
+% representing the ICMP response codes and UDP errors.
 path(Path) when is_list(Path) ->
     path(Path, [response(icmp)]).
 
@@ -236,10 +269,12 @@ response(icmp) ->
 %%-------------------------------------------------------------------------
 %%% Callbacks
 %%-------------------------------------------------------------------------
+% @private
 start_link(Options) ->
     Pid = self(),
     gen_server:start_link(?MODULE, [Pid, Options], []).
 
+% @private
 init([Pid, Options]) ->
     process_flag(trap_exit, true),
 
@@ -268,6 +303,7 @@ init([Pid, Options]) ->
         rs = RS
     }}.
 
+% @private
 handle_call(close, {Pid, _}, #state{pid = Pid} = State) ->
     {stop, normal, ok, State};
 handle_call(sport, _From, #state{sport = Sport} = State) ->
@@ -321,10 +357,12 @@ handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
     {reply, ok, State}.
 
+% @private
 handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
+% @private
 handle_info(
     {icmp, Socket, Daddr, _TTL, Data},
     #state{
@@ -344,11 +382,13 @@ handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
 
+% @private
 terminate(_Reason, #state{rs = RS, ws = WS}) ->
     procket:close(WS),
     gen_icmp:close(RS),
     ok.
 
+% @private
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
