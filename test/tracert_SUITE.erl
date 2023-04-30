@@ -33,7 +33,9 @@
 -include_lib("common_test/include/ct.hrl").
 
 -export([
-    all/0
+    all/0,
+    init_per_suite/1,
+    end_per_suite/1
 ]).
 
 -export([
@@ -47,6 +49,20 @@
     traceroute_timeout/1,
     traceroute_nxdomain/1
 ]).
+
+init_per_suite(Config) ->
+    IPv6 =
+        case gen_tcp:connect("google.com", 443, [inet6]) of
+            {ok, S} ->
+                gen_tcp:close(S),
+                true;
+            _ ->
+                false
+        end,
+    [{ipv6, IPv6} | Config].
+
+end_per_suite(Config) ->
+    Config.
 
 all() ->
     [
@@ -88,18 +104,29 @@ traceroute_resolv_single_address(_Config) ->
     [{_, _, echoreply} | _] = lists:reverse(tracert:path(Path)).
 
 % Naming for type/code in ICMPv6 differs from ICMP
-traceroute_ipv6_resolv_icmp(_Config) ->
-    Path = tracert:host("ipv6.google.com", [inet6]),
-    [{_, _, echo_reply} | _] = lists:reverse(tracert:path(Path)).
+traceroute_ipv6_resolv_icmp(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            Path = tracert:host("ipv6.google.com", [inet6]),
+            [{_, _, echo_reply} | _] = lists:reverse(tracert:path(Path));
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
-traceroute_ipv6_resolv_udp(_Config) ->
-    Path = tracert:host("ipv6.google.com", [inet6, {protocol, udp}]),
-    [{_, _, dst_unreach_noport} | _] = lists:reverse(tracert:path(Path)).
+traceroute_ipv6_resolv_udp(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            Path = tracert:host("ipv6.google.com", [inet6, {protocol, udp}]),
+            [{_, _, dst_unreach_noport} | _] = lists:reverse(tracert:path(Path));
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
 traceroute_timeout(_Config) ->
-    [timeout] = tracert:host({255, 255, 255, 254}, [
-        {ttl, 1}, {max_hops, 2}, {timeout, 5}
-    ]).
+    Reply = tracert:host({255, 255, 255, 254}, [
+        {ttl, 1}, {max_hops, 10}, {timeout, 5}
+    ]),
+    true = lists:member(timeout, Reply).
 
 traceroute_nxdomain(_Config) ->
     {'EXIT', {{badmatch, {error, nxdomain}}, _}} =

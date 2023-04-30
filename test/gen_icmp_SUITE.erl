@@ -34,7 +34,9 @@
 -include_lib("kernel/include/inet.hrl").
 
 -export([
-    all/0
+    all/0,
+    init_per_suite/1,
+    end_per_suite/1
 ]).
 
 -export([
@@ -56,6 +58,20 @@
     ipv6_filter_all/1,
     ipv6_filter_echo/1
 ]).
+
+init_per_suite(Config) ->
+    IPv6 =
+        case gen_tcp:connect("google.com", 443, [inet6]) of
+            {ok, S} ->
+                gen_tcp:close(S),
+                true;
+            _ ->
+                false
+        end,
+    [{ipv6, IPv6} | Config].
+
+end_per_suite(Config) ->
+    Config.
 
 all() ->
     [
@@ -168,97 +184,139 @@ ipv4_set_ttl(_Config) ->
     ),
     true = TTL > 0.
 
-ipv6_single_host(_Config) ->
-    [
-        {ok, "ipv6.google.com", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _}, {_, 0, _, _},
-            <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
-    ] = gen_icmp:ping("ipv6.google.com", [inet6]).
-
-ipv6_multiple_hosts(_Config) ->
-    [
-        {ok, "tunnelbroker.net", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _}, {_, _, _, _},
-            <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
-        {ok, "ipv6.google.com", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _}, {_, _, _, _},
-            <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
-    ] =
-        gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]).
-
-ipv6_different_request_reply_addresses(_Config) ->
-    case os:type() of
-        {unix, linux} ->
+ipv6_single_host(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
             [
-                {ok, "::", {0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1}, {_, 0, _, _},
-                    <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
-            ] = gen_icmp:ping("::", [inet6]);
-        {unix, _} ->
-            {skip, "not supported"}
+                {ok, "ipv6.google.com", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _},
+                    {_, 0, _, _}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
+            ] = gen_icmp:ping("ipv6.google.com", [inet6]);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
+
+ipv6_multiple_hosts(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            [
+                {ok, "tunnelbroker.net", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _},
+                    {_, _, _, _}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
+                {ok, "ipv6.google.com", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _},
+                    {_, _, _, _}, <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
+            ] =
+                gen_icmp:ping(["ipv6.google.com", "tunnelbroker.net"], [inet6]);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
+
+ipv6_different_request_reply_addresses(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            case os:type() of
+                {unix, linux} ->
+                    [
+                        {ok, "::", {0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1}, {_, 0, _, _},
+                            <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}
+                    ] = gen_icmp:ping("::", [inet6]);
+                {unix, _} ->
+                    {skip, "not supported"}
+            end;
+        false ->
+            {skip, "IPv6 unsupported"}
     end.
 
 % Set the socket TTL
-ipv6_set_ttl(_Config) ->
-    Hops = list_to_integer(getenv("GEN_ICMP_TEST_IPV6_TTL", getenv("GEN_ICMP_TEST_IPV4_TTL", "1"))),
-    [
-        {error, unreach_net, "www.google.com", {_, _, _, _, _, _, _, _}, {_, _, _, _, _, _, _, _},
-            {_, _, _, _}, _}
-    ] = gen_icmp:ping("www.google.com", [inet6, {ttl, Hops}]).
+ipv6_set_ttl(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            Hops = list_to_integer(
+                getenv("GEN_ICMP_TEST_IPV6_TTL", getenv("GEN_ICMP_TEST_IPV4_TTL", "1"))
+            ),
+            [
+                {error, unreach_net, "www.google.com", {_, _, _, _, _, _, _, _},
+                    {_, _, _, _, _, _, _, _}, {_, _, _, _}, _}
+            ] = gen_icmp:ping("www.google.com", [inet6, {ttl, Hops}]);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
 % ICMPv6 filter tests
-ipv6_filter_gen(_Config) ->
-    Filter = gen_icmp:icmp6_filter_setblockall(),
+ipv6_filter_gen(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            Filter = gen_icmp:icmp6_filter_setblockall(),
 
-    true = gen_icmp:icmp6_filter_willblock(echo_request, Filter),
-    false = gen_icmp:icmp6_filter_willpass(echo_request, Filter),
+            true = gen_icmp:icmp6_filter_willblock(echo_request, Filter),
+            false = gen_icmp:icmp6_filter_willpass(echo_request, Filter),
 
-    Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter),
-    Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter1),
+            Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter),
+            Filter1 = gen_icmp:icmp6_filter_setpass(echo_request, Filter1),
 
-    false = gen_icmp:icmp6_filter_willblock(echo_request, Filter1),
-    true = gen_icmp:icmp6_filter_willpass(echo_request, Filter1),
+            false = gen_icmp:icmp6_filter_willblock(echo_request, Filter1),
+            true = gen_icmp:icmp6_filter_willpass(echo_request, Filter1),
 
-    Filter = gen_icmp:icmp6_filter_setblock(echo_request, Filter1).
+            Filter = gen_icmp:icmp6_filter_setblock(echo_request, Filter1);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
-ipv6_filter_get(_Config) ->
-    {ok, Socket} = gen_icmp:open([inet6]),
+ipv6_filter_get(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            {ok, Socket} = gen_icmp:open([inet6]),
 
-    Pass = gen_icmp:icmp6_filter_setpassall(),
-    Block = gen_icmp:icmp6_filter_setblockall(),
+            Pass = gen_icmp:icmp6_filter_setpassall(),
+            Block = gen_icmp:icmp6_filter_setblockall(),
 
-    {ok, Pass} = gen_icmp:filter(Socket),
+            {ok, Pass} = gen_icmp:filter(Socket),
 
-    ok = gen_icmp:filter(Socket, Block),
-    {ok, Block} = gen_icmp:filter(Socket),
+            ok = gen_icmp:filter(Socket, Block),
+            {ok, Block} = gen_icmp:filter(Socket),
 
-    ok = gen_icmp:close(Socket).
+            ok = gen_icmp:close(Socket);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
-ipv6_filter_all(_Config) ->
-    {ok, Socket} = gen_icmp:open([inet6]),
+ipv6_filter_all(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            {ok, Socket} = gen_icmp:open([inet6]),
 
-    Block = gen_icmp:icmp6_filter_setblockall(),
+            Block = gen_icmp:icmp6_filter_setblockall(),
 
-    [{error, timeout, "localhost", {0, 0, 0, 0, 0, 0, 0, 1}}] =
-        gen_icmp:ping(Socket, ["localhost"], [{timeout, 500}, {filter, Block}]),
+            [{error, timeout, "localhost", {0, 0, 0, 0, 0, 0, 0, 1}}] =
+                gen_icmp:ping(Socket, ["localhost"], [{timeout, 500}, {filter, Block}]),
 
-    Pass = gen_icmp:icmp6_filter_setpassall(),
+            Pass = gen_icmp:icmp6_filter_setpassall(),
 
-    [{ok, "localhost", {0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}, _, _}] = gen_icmp:ping(
-        Socket,
-        ["localhost"],
-        [{timeout, 500}, {filter, Pass}]
-    ),
+            [{ok, "localhost", {0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}, _, _}] = gen_icmp:ping(
+                Socket,
+                ["localhost"],
+                [{timeout, 500}, {filter, Pass}]
+            ),
 
-    ok = gen_icmp:close(Socket).
+            ok = gen_icmp:close(Socket);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
-ipv6_filter_echo(_Config) ->
-    {ok, Socket} = gen_icmp:open([inet6]),
+ipv6_filter_echo(Config) ->
+    case ?config(ipv6, Config) of
+        true ->
+            {ok, Socket} = gen_icmp:open([inet6]),
 
-    Block = gen_icmp:icmp6_filter_setblockall(),
-    Filter = gen_icmp:icmp6_filter_setpass(echo_reply, Block),
+            Block = gen_icmp:icmp6_filter_setblockall(),
+            Filter = gen_icmp:icmp6_filter_setpass(echo_reply, Block),
 
-    [{ok, "localhost", {0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}, _, _}] = gen_icmp:ping(
-        Socket, ["localhost"], [{timeout, 500}, {filter, Filter}]
-    ),
+            [{ok, "localhost", {0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 1}, _, _}] = gen_icmp:ping(
+                Socket, ["localhost"], [{timeout, 500}, {filter, Filter}]
+            ),
 
-    ok = gen_icmp:close(Socket).
+            ok = gen_icmp:close(Socket);
+        false ->
+            {skip, "IPv6 unsupported"}
+    end.
 
 getenv(Name, Default) ->
     case os:getenv(Name) of
