@@ -78,6 +78,7 @@
 ]).
 
 -type fd() :: -16#7fffffff..16#7fffffff.
+-type socket() :: pid().
 
 -record(state, {
     % Protocol family (inet, inet6)
@@ -113,12 +114,9 @@
 %% packets will be received by the socket. setopts/2 can be used
 %% to place the socket in {active,true} mode.
 %%
-%% See the procket README for the raw socket options and for
-%% instructions on setting up the setuid helper.
-%%
 %% gen_icmp first attempts to natively open the socket and falls
 %% back to forking the setuid helper program if beam does not have
-%% the appropriate privileges.  Privileges to open a raw socket can
+%% the appropriate privileges. Privileges to open a raw socket can
 %% be given by, for example, running as root or, on Linux, granting
 %% the CAP_NET_RAW capability to beam:
 %%
@@ -134,52 +132,157 @@
 %%
 %% Where:
 %%
-%%     * Socket is the pid of the gen_icmp process
+%% * Socket is the pid of the gen_icmp process
 %%
-%%     * Address is a tuple representing the IPv4 or IPv6 source address
+%% * Address is a tuple representing the IPv4 or IPv6 source address
 %%
-%%     * TTL: IPv4: TTL taken from the IP header
+%% * TTL: IPv4: TTL taken from the IP header
 %%
-%%     * TTL: IPv6: the socket's hop limit returned from
-%%       getsockopt(IPV6_UNICAST_HOPS) (this is not the packet's
-%%       TTL, it is the socket's max TTL)
+%% * TTL: IPv6: the socket's hop limit returned from
+%%   getsockopt(IPV6_UNICAST_HOPS) (this is not the packet's
+%%   TTL, it is the socket's max TTL)
 %%
-%%     * Packet is the complete ICMP packet including the ICMP headers
+%% * Packet is the complete ICMP packet including the ICMP headers
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:open().
+%% {ok,<0.299.0>}
+%% '''
+-spec open() -> {ok, socket()} | {error, system_limit | inet:posix()}.
 open() ->
     open([], []).
+
+%% @doc Open an ICMP socket with raw socket options
+%%
+%% See the https://github.com/msantos/procket for the raw socket options
+%% and for instructions on setting up the setuid helper.
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:open([{ttl, 1}, inet6]).
+%% {ok,<0.302.0>}
+%% '''
+-spec open(proplists:proplist()) -> {ok, socket()} | {error, system_liimt | inet:posix()}.
 open(RawOpts) ->
     open(RawOpts, []).
+
+%% @doc Open an ICMP socket with options
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:open([{ttl, 1}, inet6], [list]).
+%% {ok,<0.302.0>}
+%% '''
+-spec open(proplists:proplist(), [inet:inet_backend() | gen_udp:open_option()]) ->
+    {ok, socket()} | {error, system_liimt | inet:posix()}.
 open(RawOpts, SockOpts) ->
     start_link(RawOpts, SockOpts).
 
 %% @doc Close the ICMP socket
-close(Ref) when is_pid(Ref) ->
-    gen_server:call(Ref, close, infinity).
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, S} = gen_icmp:open().
+%% {ok,<0.224.0>}
+%% 2> gen_icmp:close(S).
+%% ok
+%% '''
+-spec close(socket()) -> ok.
+close(Socket) when is_pid(Socket) ->
+    gen_server:call(Socket, close, infinity).
 
 %% @doc Send data via an ICMP socket
 %%
 %% Like the gen_udp and gen_tcp modules, any process can send ICMP
 %% packets but only the owner will receive the responses.
-send(Ref, Address, Packet) when is_pid(Ref) ->
-    gen_server:call(Ref, {send, Address, Packet}, infinity).
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, S} = gen_icmp:open().
+%% {ok,<0.224.0>}
+%% 2>gen_icmp:send(S, "google.com", gen_icmp:echo(inet, 0, 0)).
+%% ok
+%% 3> gen_icmp:recv(S, 1).
+%% {ok,{{142,251,32,78},
+%%      <<69,0,0,84,0,0,0,0,116,1,214,38,142,251,32,78,100,115,
+%%             92,198,0,0,19,125,0,...>>}}
+%% 4> gen_icmp:close(S).
+%% ok
+%% '''
+-spec send(
+    socket(),
+    {inet:ip_address(), inet:port_number()}
+    | inet:family_address()
+    | socket:sockaddr_in()
+    | socket:sockaddr_in6(),
+    iodata()
+) -> ok | {error, not_owner | inet:posix()}.
+send(Socket, Address, Packet) when is_pid(Socket) ->
+    gen_server:call(Socket, {send, Address, Packet}, infinity).
 
 %% @doc Read data from an ICMP socket
 %%
 %% This function receives a packet from a socket in passive mode.
 %%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, S} = gen_icmp:open().
+%% {ok,<0.224.0>}
+%% 2>gen_icmp:send(S, "google.com", gen_icmp:echo(inet, 0, 0)).
+%% ok
+%% 3> gen_icmp:recv(S, 1).
+%% {ok,{{142,251,32,78},
+%%      <<69,0,0,84,0,0,0,0,116,1,214,38,142,251,32,78,100,115,
+%%             92,198,0,0,19,125,0,...>>}}
+%% 4> gen_icmp:close(S).
+%% ok
+%% '''
+-spec recv(socket(), non_neg_integer()) ->
+    {ok, inet:ip_address() | inet:returned_non_ip_address(), string() | binary()}
+    | {error, not_owner | timeout | inet:posix()}.
+recv(Socket, Length) ->
+    recv(Socket, Length, infinity).
+
+%% @doc Read data from an ICMP socket with timeout
+%%
 %% The optional Timeout parameter specifies a timeout in
 %% milliseconds. The default value is infinity.
-recv(Ref, Length) ->
-    recv(Ref, Length, infinity).
-recv(Ref, Length, Timeout) ->
-    gen_server:call(Ref, {recv, Length, Timeout}, infinity).
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, S} = gen_icmp:open().
+%% {ok,<0.299.0>}
+%% 2> gen_icmp:send(S, "google.com", gen_icmp:echo(inet, 0, 0)).
+%% ok
+%% 3> gen_icmp:recv(S, 1, 5000).
+%% {ok,{{142,251,41,78},
+%%           <<69,0,0,84,0,0,0,0,116,1,205,38,142,251,41,78,100,115,
+%%                    92,198,0,0,100,77,0,...>>}}
+%% 4> gen_icmp:recv(S, 1, 5000).
+%% {error,timeout}
+%% 5> gen_icmp:close(S).
+%% ok
+%% '''
+-spec recv(socket(), non_neg_integer(), timeout()) ->
+    {ok, inet:ip_address() | inet:returned_non_ip_address(), string() | binary()}
+    | {error, not_owner | timeout | inet:posix()}.
+recv(Socket, Length, Timeout) ->
+    gen_server:call(Socket, {recv, Length, Timeout}, infinity).
 
 %% @doc Change the controlling process of the ICMP socket
 %%
 %% Change the process owning the socket. Allows another process to
 %% receive the ICMP responses.
-controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
-    gen_server:call(Ref, {controlling_process, Pid}, infinity).
+controlling_process(Socket, Pid) when is_pid(Socket), is_pid(Pid) ->
+    gen_server:call(Socket, {controlling_process, Pid}, infinity).
 
 %% @doc Set socket options
 %%
@@ -187,7 +290,9 @@ controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
 %% the gen_udp socket.
 %%
 %% setopts/2 can be used to toggle the socket between passive and
-%% active mode:
+%% active mode.
+%%
+%% == Examples ==
 %%
 %% ```
 %% {ok, Socket} = gen_icmp:open(), % socket is {active,false}
@@ -195,14 +300,14 @@ controlling_process(Ref, Pid) when is_pid(Ref), is_pid(Pid) ->
 %% % do stuff with the socket
 %% ok = gen_icmp:setopts(Socket, [{active, false}]).
 %% '''
-setopts(Ref, Options) when is_pid(Ref), is_list(Options) ->
-    gen_server:call(Ref, {setopts, Options}, infinity).
+setopts(Socket, Options) when is_pid(Socket), is_list(Options) ->
+    gen_server:call(Socket, {setopts, Options}, infinity).
 
-family(Ref) when is_pid(Ref) ->
-    gen_server:call(Ref, family, infinity).
+family(Socket) when is_pid(Socket) ->
+    gen_server:call(Socket, family, infinity).
 
-getfd(Ref) when is_pid(Ref) ->
-    gen_server:call(Ref, getfd, infinity).
+getfd(Socket) when is_pid(Socket) ->
+    gen_server:call(Socket, getfd, infinity).
 
 %% @doc Set or get ICMPv6 filter for a socket
 %%
@@ -210,10 +315,10 @@ getfd(Ref) when is_pid(Ref) ->
 %% sockets, the atom 'unsupported' is returned.
 %%
 %% Filters can be generated by using the icmp6_filter functions.
-filter(Ref) when is_pid(Ref) ->
-    gen_server:call(Ref, filter, infinity).
-filter(Ref, Filter) when is_pid(Ref) ->
-    gen_server:call(Ref, {filter, Filter}, infinity).
+filter(Socket) when is_pid(Socket) ->
+    gen_server:call(Socket, filter, infinity).
+filter(Socket, Filter) when is_pid(Socket) ->
+    gen_server:call(Socket, {filter, Filter}, infinity).
 
 %% @doc Send an ICMP ECHO_REQUEST
 %%
@@ -975,10 +1080,10 @@ array_get(Offset, Bin) ->
     Array = array:from_list([N || <<N:4/native-unsigned-integer-unit:8>> <= Bin]),
     array:get(Offset, Array).
 
-flush_events(Ref) ->
+flush_events(Socket) ->
     receive
-        {icmp, Ref, _Addr, _TTL, _Data} ->
-            flush_events(Ref)
+        {icmp, Socket, _Addr, _TTL, _Data} ->
+            flush_events(Socket)
     after 0 -> ok
     end.
 
