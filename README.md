@@ -6,8 +6,7 @@ writes a proper gen\_icmp module.
 gen\_icmp uses procket to get a raw socket and abuses gen\_udp for the
 socket handling. gen\_icmp should work on Linux and BSDs.
 
-The interfaces, return values and code may still change before the final
-version. If you just need a simple example of sending a ping, also see:
+For a simple example of sending a ping, also see:
 
 <https://github.com/msantos/procket/blob/master/src/icmp.erl>
 
