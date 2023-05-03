@@ -77,9 +77,36 @@
     code_change/3
 ]).
 
--type fd() :: -16#7fffffff..16#7fffffff.
+-type uint8_t() :: 0..16#ff.
+-type uint16_t() :: 0..16#ffff.
+
+-type int32_t() :: -16#7fffffff..16#7fffffff.
+
+-type fd() :: int32_t().
 -type socket() :: pid().
 -type icmp6_filter() :: <<_:256>>.
+
+% ping details
+-type id() :: uint16_t().
+-type sequence() :: uint16_t().
+-type ttlx() :: uint8_t().
+-type elapsed() :: int32_t() | undefined.
+
+-export_type([
+    uint8_t/0,
+    uint16_t/0,
+
+    int32_t/0,
+
+    fd/0,
+    socket/0,
+    icmp6_filter/0,
+
+    id/0,
+    sequence/0,
+    ttlx/0,
+    elapsed/0
+]).
 
 -record(state, {
     % Protocol family (inet, inet6)
@@ -379,7 +406,27 @@ filter(Socket, Filter) when is_pid(Socket) ->
 %% packet. The argument to ping/1 can be either a hostname or a
 %% list of hostnames.
 %%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:ping("google.com").
+%% [{ok,"google.com",
+%%      {142,251,41,46},
+%%      {142,251,41,46},
+%%      {61261,0,116,84},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
+%% '''
+%%
 %% @see ping/3
+-spec ping(inet:socket_address() | inet:hostname() | [inet:socket_address() | inet:hostname()]) ->
+    [
+        {ok, inet:socket_address() | inet:hostname(), inet:ip_address(), inet:ip_address(),
+            {id(), sequence(), ttlx(), elapsed()}, binary()}
+        | {error, unreach_host | timxceed_intrans, [inet:socket_address() | inet:hostname()],
+            inet:ip_address(), inet:ip_address(), {id(), sequence(), ttlx(), elapsed()}, binary()}
+        | {error, timeout | inet:posix(), [inet:socket_address() | inet:hostname()],
+            inet:ip_address()}
+    ].
 ping(Host) ->
     ping(Host, []).
 
@@ -387,7 +434,30 @@ ping(Host) ->
 %%
 %% Ping a host or a list of hosts.
 %%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:ping("google.com", [inet6]).
+%% [{ok,"google.com",
+%%      {9735,63664,16395,2052,0,0,0,8206},
+%%      {9735,63664,16395,2052,0,0,0,8206},
+%%      {61261,0,64,53},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
+%% '''
+%%
 %% @see ping/3
+-spec ping(
+    inet:socket_address() | inet:hostname() | [inet:socket_address() | inet:hostname()],
+    proplists:proplist()
+) ->
+    [
+        {ok, inet:socket_address() | inet:hostname(), inet:ip_address(), inet:ip_address(),
+            {id(), sequence(), ttlx(), elapsed()}, binary()}
+        | {error, unreach_host | timxceed_intrans, [inet:socket_address() | inet:hostname()],
+            inet:ip_address(), inet:ip_address(), {id(), sequence(), ttlx(), elapsed()}, binary()}
+        | {error, timeout | inet:posix(), [inet:socket_address() | inet:hostname()],
+            inet:ip_address()}
+    ].
 ping(Host, Options) when is_tuple(Host) ->
     ping([Host], Options);
 ping([Char | _] = Host, Options) when is_integer(Char) ->
@@ -446,6 +516,47 @@ ping(Hosts, Options) ->
 %% The default filter allows: ICMP6_ECHO_REPLY, ICMP6_DST_UNREACH,
 %% ICMP6_PACKET_TOO_BIG, ICMP6_TIME_EXCEEDED and ICMP6_PARAM_PROB.
 %% Note: ping/3 does not restore the original filter on the socket.
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, S} = gen_icmp:open([inet6]).
+%% {ok,<0.299.0>}
+%% 2> gen_icmp:ping(S, ["google.com"], []).
+%% [{ok,"google.com",
+%%      {9735,63664,16395,2051,0,0,0,8206},
+%%      {9735,63664,16395,2051,0,0,0,8206},
+%%      {61261,0,64,110},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
+%% 3> gen_icmp:ping(S, ["2001:4860:4860::8888"], []).
+%% [{ok,"2001:4860:4860::8888",
+%%      {8193,18528,18528,0,0,0,0,34952},
+%%      {8193,18528,18528,0,0,0,0,34952},
+%%      {61261,0,64,20},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
+%% 4> gen_icmp:ping(S, ["2001:4860:4860::8888", "google.com"], []).
+%% [{ok,"google.com",
+%%      {9735,63664,16395,2051,0,0,0,8206},
+%%      {9735,63664,16395,2051,0,0,0,8206},
+%%      {61261,1,64,23},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>},
+%%  {ok,"2001:4860:4860::8888",
+%%      {8193,18528,18528,0,0,0,0,34952},
+%%      {8193,18528,18528,0,0,0,0,34952},
+%%      {61261,0,64,23},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
+%% 5> gen_icmp:close(S).
+%% ok
+%% '''
+-spec ping(socket(), [inet:socket_address() | inet:hostname()], proplists:proplist()) ->
+    [
+        {ok, inet:socket_address() | inet:hostname(), inet:ip_address(), inet:ip_address(),
+            {id(), sequence(), ttlx(), elapsed()}, binary()}
+        | {error, unreach_host | timxceed_intrans, [inet:socket_address() | inet:hostname()],
+            inet:ip_address(), inet:ip_address(), {id(), sequence(), ttlx(), elapsed()}, binary()}
+        | {error, timeout | inet:posix(), [inet:socket_address() | inet:hostname()],
+            inet:ip_address()}
+    ].
 ping(Socket, Hosts, Options) when is_pid(Socket), is_list(Hosts), is_list(Options) ->
     ok = setopts(Socket, [{active, true}]),
 
