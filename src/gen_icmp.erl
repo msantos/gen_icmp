@@ -669,7 +669,7 @@ init([Pid, RawOpts, SockOpts]) ->
 init_1(Pid, Family, RawOpts, SockOpts0, {ok, FD}) ->
     TTL = proplists:get_value(ttl, RawOpts),
 
-    case TTL of
+    _ = case TTL of
         undefined -> ok;
         _ -> set_ttl(FD, Family, TTL)
     end,
@@ -968,13 +968,31 @@ payload(echo) ->
     USec = gettime(),
     <<USec:8/signed-integer-unit:8, (list_to_binary(lists:seq($\s, $O)))/binary>>.
 
-% Set the TTL on a socket
+%% @doc Set the TTL on a file descriptor
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:set_ttl(gen_icmp:getfd(S), gen_icmp:family(S), 1).
+%% ok
+%% 2> gen_icmp:get_ttl(gen_icmp:getfd(S), gen_icmp:family(S)).
+%% {ok,1}
+%% '''
+-spec set_ttl(fd(), inet | inet6, int32_t()) -> ok | {error, inet:posix()}.
 set_ttl(FD, inet, TTL) ->
     procket:setsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<TTL:32/native>>);
 set_ttl(FD, inet6, TTL) ->
     procket:setsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<TTL:32/native>>).
 
-% Get the socket TTL
+%% @doc Get the TTL for a file descriptor
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:get_ttl(gen_icmp:getfd(S), gen_icmp:family(S)).
+%% {ok,64}
+%% '''
+-spec get_ttl(fd(), inet | inet6) -> {ok, int32_t()} | {error, inet:posix()}.
 get_ttl(FD, inet) ->
     case procket:getsockopt(FD, ?IPPROTO_IP, ip_ttl(), <<0:32>>) of
         {ok, <<TTL:32/native>>} -> {ok, TTL};
@@ -1068,6 +1086,99 @@ parse(Family, Addr) when is_list(Addr) ->
     parse_or_resolve(Family, Addr, inet_parse:address(Addr));
 parse(_Family, Addr) when is_tuple(Addr) ->
     {ok, [Addr]}.
+
+% IPv6 ICMP filtering
+%
+% Linux reverses the meaning of the macros in RFC3542
+icmp6_filter_setpassall() ->
+    case os:type() of
+        {unix, linux} ->
+            <<0:256>>;
+        {unix, _} ->
+            <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>
+    end.
+
+icmp6_filter_setblockall() ->
+    case os:type() of
+        {unix, linux} ->
+            <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
+                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>;
+        {unix, _} ->
+            <<0:256>>
+    end.
+
+%% @doc Allowed types for an ICMPv6 socket
+%%
+%% Generate a ICMPv6 filter that can be set on a socket using
+%% filter/2.
+%%
+%% == Examples ==
+%%
+%% To generate a filter that allowed only ICMP6_ECHO_REPLY messages:
+%%
+%% ```
+%% {ok, Socket} = gen_icmp:open([inet6]),
+%% Filter = gen_icmp:icmp6_filter_setpass(echo_reply,
+%% gen_icmp:icmp6_filter_setblockall()),
+%% ok = gen_icmp:filter(Socket, Filter).
+%% '''
+
+%#define ICMP6_FILTER_SETPASS(type, filterp) \
+%            (((filterp)->icmp6_filt[(type) >> 5]) |= (1 << ((type) & 31)))
+icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    Fun =
+        case os:type() of
+            {unix, linux} ->
+                fun(N) -> N band bnot Value end;
+            {unix, _} ->
+                fun(N) -> N bor Value end
+        end,
+    array_set(Offset, Fun, Filter).
+
+%#define ICMP6_FILTER_SETBLOCK(type, filterp) \
+%            (((filterp)->icmp6_filt[(type) >> 5]) &= ~(1 << ((type) & 31)))
+icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    Fun =
+        case os:type() of
+            {unix, linux} ->
+                fun(N) -> N bor Value end;
+            {unix, _} ->
+                fun(N) -> N band bnot Value end
+        end,
+    array_set(Offset, Fun, Filter).
+
+%#define ICMP6_FILTER_WILLPASS(type, filterp) \
+%            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) != 0)
+icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    El = array_get(Offset, Filter),
+    case os:type() of
+        {unix, linux} -> El band Value =:= 0;
+        {unix, _} -> El band Value =/= 0
+    end.
+
+%#define ICMP6_FILTER_WILLBLOCK(type, filterp) \
+%            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) == 0)
+icmp6_filter_willblock(Type0, <<_:256>> = Filter) ->
+    Type = icmp6_message:type_to_uint8(Type0),
+    Offset = Type bsr 5,
+    Value = 1 bsl (Type band 31),
+    El = array_get(Offset, Filter),
+    case os:type() of
+        {unix, linux} -> El band Value =/= 0;
+        {unix, _} -> El band Value =:= 0
+    end.
 
 %%-------------------------------------------------------------------------
 %%% Internal Functions
@@ -1222,98 +1333,6 @@ icmp6_filter() ->
             1;
         {unix, _} ->
             18
-    end.
-
-% IPv6 ICMP filtering
-%
-% Linux reverses the meaning of the macros in RFC3542
-icmp6_filter_setpassall() ->
-    case os:type() of
-        {unix, linux} ->
-            <<0:256>>;
-        {unix, _} ->
-            <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>
-    end.
-
-icmp6_filter_setblockall() ->
-    case os:type() of
-        {unix, linux} ->
-            <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
-                16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>;
-        {unix, _} ->
-            <<0:256>>
-    end.
-
-%% @doc Allowed types for an ICMPv6 socket
-%%
-%% Generate a ICMPv6 filter that can be set on a socket using
-%% filter/2.
-%%
-%% For example, to generate a filter that allowed only
-%% ICMP6_ECHO_REPLY messages:
-%%
-%% ```
-%% {ok, Socket} = gen_icmp:open([inet6]),
-%% Filter = gen_icmp:icmp6_filter_setpass(echo_reply,
-%% gen_icmp:icmp6_filter_setblockall()),
-%% ok = gen_icmp:filter(Socket, Filter).
-%% '''
-
-%#define ICMP6_FILTER_SETPASS(type, filterp) \
-%            (((filterp)->icmp6_filt[(type) >> 5]) |= (1 << ((type) & 31)))
-icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
-    Type = icmp6_message:type_to_uint8(Type0),
-    Offset = Type bsr 5,
-    Value = 1 bsl (Type band 31),
-    Fun =
-        case os:type() of
-            {unix, linux} ->
-                fun(N) -> N band bnot Value end;
-            {unix, _} ->
-                fun(N) -> N bor Value end
-        end,
-    array_set(Offset, Fun, Filter).
-
-%#define ICMP6_FILTER_SETBLOCK(type, filterp) \
-%            (((filterp)->icmp6_filt[(type) >> 5]) &= ~(1 << ((type) & 31)))
-icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
-    Type = icmp6_message:type_to_uint8(Type0),
-    Offset = Type bsr 5,
-    Value = 1 bsl (Type band 31),
-    Fun =
-        case os:type() of
-            {unix, linux} ->
-                fun(N) -> N bor Value end;
-            {unix, _} ->
-                fun(N) -> N band bnot Value end
-        end,
-    array_set(Offset, Fun, Filter).
-
-%#define ICMP6_FILTER_WILLPASS(type, filterp) \
-%            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) != 0)
-icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
-    Type = icmp6_message:type_to_uint8(Type0),
-    Offset = Type bsr 5,
-    Value = 1 bsl (Type band 31),
-    El = array_get(Offset, Filter),
-    case os:type() of
-        {unix, linux} -> El band Value =:= 0;
-        {unix, _} -> El band Value =/= 0
-    end.
-
-%#define ICMP6_FILTER_WILLBLOCK(type, filterp) \
-%            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) == 0)
-icmp6_filter_willblock(Type0, <<_:256>> = Filter) ->
-    Type = icmp6_message:type_to_uint8(Type0),
-    Offset = Type bsr 5,
-    Value = 1 bsl (Type band 31),
-    El = array_get(Offset, Filter),
-    case os:type() of
-        {unix, linux} -> El band Value =/= 0;
-        {unix, _} -> El band Value =:= 0
     end.
 
 % Offset starts at 0
