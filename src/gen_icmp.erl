@@ -363,7 +363,7 @@ family(Socket) when is_pid(Socket) ->
 getfd(Socket) when is_pid(Socket) ->
     gen_server:call(Socket, getfd, infinity).
 
-%% @doc Get ICMPv6 filter for a socket
+%% @doc Get ICMPv6 socket filter
 %%
 %% Retrieves the ICMPv6 filter for a socket. For ICMPv4
 %% sockets, the atom `unsupported' is returned.
@@ -381,7 +381,7 @@ getfd(Socket) when is_pid(Socket) ->
 filter(Socket) when is_pid(Socket) ->
     gen_server:call(Socket, filter, infinity).
 
-%% @doc Set ICMPv6 filter for a socket
+%% @doc Set ICMPv6 socket filter
 %%
 %% Sets an ICMPv6 filter on a socket. For ICMPv4 sockets, the atom
 %% `unsupported' is returned.
@@ -669,10 +669,11 @@ init([Pid, RawOpts, SockOpts]) ->
 init_1(Pid, Family, RawOpts, SockOpts0, {ok, FD}) ->
     TTL = proplists:get_value(ttl, RawOpts),
 
-    _ = case TTL of
-        undefined -> ok;
-        _ -> set_ttl(FD, Family, TTL)
-    end,
+    _ =
+        case TTL of
+            undefined -> ok;
+            _ -> set_ttl(FD, Family, TTL)
+        end,
 
     SockOpts =
         case proplists:is_defined(active, SockOpts0) of
@@ -1087,12 +1088,14 @@ parse(Family, Addr) when is_list(Addr) ->
 parse(_Family, Addr) when is_tuple(Addr) ->
     {ok, [Addr]}.
 
-% IPv6 ICMP filtering
-%
-% Linux reverses the meaning of the macros in RFC3542
+%% @doc IPv6 ICMP filtering: allow all ICMP types
+%%
+%% @see icmp6_filter_setblock/2
+-spec icmp6_filter_setpassall() -> icmp6_filter().
 icmp6_filter_setpassall() ->
     case os:type() of
         {unix, linux} ->
+            % Linux reverses the RFC3542 macros
             <<0:256>>;
         {unix, _} ->
             <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
@@ -1100,9 +1103,14 @@ icmp6_filter_setpassall() ->
                 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>
     end.
 
+%% @doc ICMPv6 filtering: block all ICMP types
+%%
+%% @see icmp6_filter_setpass/2
+-spec icmp6_filter_setblockall() -> icmp6_filter().
 icmp6_filter_setblockall() ->
     case os:type() of
         {unix, linux} ->
+            % Linux reverses the RFC3542 macros
             <<16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
                 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff,
                 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>;
@@ -1110,10 +1118,7 @@ icmp6_filter_setblockall() ->
             <<0:256>>
     end.
 
-%% @doc Allowed types for an ICMPv6 socket
-%%
-%% Generate a ICMPv6 filter that can be set on a socket using
-%% filter/2.
+%% @doc Update a filter to allow an ICMPv6 type
 %%
 %% == Examples ==
 %%
@@ -1121,13 +1126,15 @@ icmp6_filter_setblockall() ->
 %%
 %% ```
 %% {ok, Socket} = gen_icmp:open([inet6]),
-%% Filter = gen_icmp:icmp6_filter_setpass(echo_reply,
-%% gen_icmp:icmp6_filter_setblockall()),
+%% Filter = gen_icmp:icmp6_filter_setpass(echo_reply, gen_icmp:icmp6_filter_setblockall()),
 %% ok = gen_icmp:filter(Socket, Filter).
 %% '''
+%%
+%% @see filter/2
 
 %#define ICMP6_FILTER_SETPASS(type, filterp) \
 %            (((filterp)->icmp6_filt[(type) >> 5]) |= (1 << ((type) & 31)))
+-spec icmp6_filter_setpass(atom() | uint8_t(), icmp6_filter()) -> icmp6_filter().
 icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
@@ -1141,8 +1148,27 @@ icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
         end,
     array_set(Offset, Fun, Filter).
 
+%% @doc Update a filter to block an ICMPv6 type
+%%
+%% == Examples ==
+%%
+%% To generate a filter that allowed only ICMP6_PACKET_TOO_BIG messages:
+%%
+%% ```
+%% 1> {ok, Socket} = gen_icmp:open([inet6]).
+%% {ok,<0.300.0>}
+%% 2> Filter = gen_icmp:icmp6_filter_setblock(packet_too_big, gen_icmp:icmp6_filter_setpassall()).
+%% <<4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+%%     0,...>>
+%% 3> gen_icmp:filter(Socket, Filter).
+%% ok
+%% '''
+%%
+%% @see filter/2
+
 %#define ICMP6_FILTER_SETBLOCK(type, filterp) \
 %            (((filterp)->icmp6_filt[(type) >> 5]) &= ~(1 << ((type) & 31)))
+-spec icmp6_filter_setblock(atom() | uint8_t(), icmp6_filter()) -> icmp6_filter().
 icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
@@ -1156,8 +1182,23 @@ icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
         end,
     array_set(Offset, Fun, Filter).
 
+%% @doc Test if a filter allows an ICMPv6 type
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> Filter = gen_icmp:icmp6_filter_setblock(packet_too_big, gen_icmp:icmp6_filter_setpassall()).
+%% <<4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+%%   0,...>>
+%% 2> gen_icmp:icmp6_filter_willpass(echo_reply, Filter).
+%% true
+%% 3> gen_icmp:icmp6_filter_willpass(packet_too_big, Filter).
+%% false
+%% '''
+
 %#define ICMP6_FILTER_WILLPASS(type, filterp) \
 %            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) != 0)
+-spec icmp6_filter_willpass(atom() | uint8_t(), icmp6_filter()) -> boolean().
 icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
@@ -1168,8 +1209,23 @@ icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
         {unix, _} -> El band Value =/= 0
     end.
 
+%% @doc Test if a filter blocks an ICMPv6 type
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> Filter = gen_icmp:icmp6_filter_setblock(packet_too_big, gen_icmp:icmp6_filter_setpassall()).
+%% <<4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+%%   0,...>>
+%% 2> gen_icmp:icmp6_filter_willblock(echo_reply, Filter).
+%% false
+%% 3> gen_icmp:icmp6_filter_willblock(packet_too_big, Filter).
+%% true
+%% '''
+
 %#define ICMP6_FILTER_WILLBLOCK(type, filterp) \
 %            ((((filterp)->icmp6_filt[(type) >> 5]) & (1 << ((type) & 31))) == 0)
+-spec icmp6_filter_willblock(atom() | uint8_t(), icmp6_filter()) -> boolean().
 icmp6_filter_willblock(Type0, <<_:256>> = Filter) ->
     Type = icmp6_message:type_to_uint8(Type0),
     Offset = Type bsr 5,
