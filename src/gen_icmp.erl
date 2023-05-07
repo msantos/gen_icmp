@@ -28,6 +28,21 @@
 %%% NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 %%% SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+%% @doc gen_icmp is an interface for using ICMP and ICMPv6 sockets
+%%
+%% gen_icmp uses raw sockets and abuses gen_udp for the socket
+%% handling. gen_icmp should work on Linux and BSDs.
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:ping("hex.pm").
+%% [{ok,"hex.pm",
+%%      {35,241,14,39},
+%%      {35,241,14,39},
+%%      {61261,0,116,215},
+%%      <<" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNO">>}]
+%% '''
 -module(gen_icmp).
 -behaviour(gen_server).
 -include_lib("kernel/include/inet.hrl").
@@ -79,6 +94,7 @@
 
 -type uint8_t() :: 0..16#ff.
 -type uint16_t() :: 0..16#ffff.
+-type uint32_t() :: 0..16#ffffffff.
 
 -type int32_t() :: -16#7fffffff..16#7fffffff.
 
@@ -90,11 +106,31 @@
 -type id() :: uint16_t().
 -type sequence() :: uint16_t().
 -type ttlx() :: uint8_t().
+% ICMP packet time to live (renamed to avoid conflict with ttl() defined in the pkt header file)
 -type elapsed() :: int32_t() | undefined.
+
+-type packet_option() ::
+    {type, atom | uint8_t()}
+    | {code, atom | uint8_t()}
+    | {id, id()}
+    | {sequence, sequence()}
+    | {gateway, pkt:in_addr()}
+    | {un, binary()}
+    | {mtu, uint16_t()}
+    | {pointer, uint8_t() | uint32_t()}
+    | {ts_orig, uint32_t()}
+    | {ts_recv, uint32_t()}
+    | {ts_tx, uint32_t()}
+    | {maxdelay, uint16_t()}
+    | {saddr, pkt:in6_addr()}
+    | {daddr, pkt:in6_addr()}
+    | {len, non_neg_integer()}
+    | {next, uint8_t()}.
 
 -export_type([
     uint8_t/0,
     uint16_t/0,
+    uint32_t/0,
 
     int32_t/0,
 
@@ -105,7 +141,8 @@
     id/0,
     sequence/0,
     ttlx/0,
-    elapsed/0
+    elapsed/0,
+    packet_option/0
 ]).
 
 -record(state, {
@@ -793,7 +830,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% 2> gen_icmp:packet(#icmp{}, <<"abc">>).
 %% <<8,0,51,157,0,0,0,0,97,98,99>>
 %% '''
--spec packet(#icmp{} | #icmp6_pseudohdr{}, binary()) -> binary().
+-spec packet(#icmp{} | #icmp6_pseudohdr{} | [packet_option()], binary()) -> binary().
 packet(#icmp{} = Header, Payload) when is_binary(Payload) ->
     Sum = pkt:makesum(
         list_to_binary([
@@ -827,10 +864,19 @@ packet(
         pkt:icmp6(Header#icmp6{checksum = Sum}),
         Payload
     ]);
-packet(Header, Payload) ->
+packet(Header, Payload) when is_list(Header) ->
     packet(inet, Header, Payload).
 
-% IPv4 ICMP packet
+%% @doc Construct an ICMP or ICMPv6 packet payload
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> gen_icmp:packet(inet, [{type, dest_unreach}, {code, unreach_port}], <<"payload goes here">>).
+%% <<3,3,135,239,0,0,0,0,112,97,121,108,111,97,100,32,103,
+%%   111,101,115,32,104,101,114,101>>
+%% '''
+-spec packet(inet | inet6, [packet_option()], binary()) -> binary().
 packet(inet, Header, Payload) when is_list(Header), is_binary(Payload) ->
     Default = #icmp{},
 
@@ -1411,6 +1457,8 @@ flush_events(Socket) ->
     after 0 -> ok
     end.
 
+%% @private
+-spec gettime() -> integer().
 gettime() ->
     try erlang:monotonic_time(micro_seconds) of
         N ->
@@ -1420,9 +1468,13 @@ gettime() ->
             timestamp_to_microseconds(os:timestamp())
     end.
 
+%% @private
+-spec timediff(integer()) -> integer().
 timediff(T) ->
     timediff(gettime(), T).
 
+%% @private
+-spec timediff(integer(), integer()) -> integer().
 timediff(T1, T2) ->
     T1 - T2.
 

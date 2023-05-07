@@ -28,12 +28,16 @@
 %%% NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 %%% SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-%%
-%% traceroute
+%% @doc Perform a traceroute
 %%
 %% Send a probe packet with the time to live set from 1. Monitor
 %% an ICMP socket for ICMP responses or timeout.
 %%
+%% == Examples ==
+%%
+%% ```
+%% 1> tracert:host("hex.pm").
+%% '''
 -module(tracert).
 -behaviour(gen_server).
 
