@@ -89,57 +89,136 @@
     rs
 }).
 
+-type socket() :: pid().
+-type option() ::
+    {family, inet | inet6}
+    | {protocol, icmp | udp}
+    | {ttl, non_neg_integer()}
+    | {max_hops, non_neg_integer()}
+    | {timeout, non_neg_integer() | infinity}
+    | {packet, binary()}
+    | {dport, gen_icmp:uint16_t()}
+    | {sport, gen_icmp:uint16_t()}
+    | {next_port, gen_icmp:uint16_t()}
+    | {saddr, inet:socket_address()}
+    | {daddr, inet:socket_address()}.
+
+-export_type([
+    option/0,
+    socket/0
+]).
+
 -ifndef(PF_INET6).
 -define(PF_INET6, family(inet6)).
 -endif.
 
-% @doc Perform a traceroute to a destination.
+%% @doc Perform an ICMP traceroute to a destination.
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> tracert:host("google.com").
+%% [timeout,
+%%  {{142,250,57,128},
+%%   1174,
+%%   {icmp,<<11,0,111,150,0,0,0,0,69,96,0,84,128,116,64,0,1,
+%%           1,125,44,10,128,...>>}},
+%%  {{172,253,79,98},
+%%   3418,
+%%   {icmp,<<11,0,244,238,0,17,0,0,69,96,0,84,128,117,64,0,1,
+%%           1,125,43,10,...>>}},
+%%  {{192,178,45,217},
+%%   4103,
+%%   {icmp,<<11,0,111,113,0,17,0,0,69,96,0,84,128,118,64,0,1,
+%%           1,125,42,...>>}},
+%%  {{216,239,57,177},
+%%   2233,
+%%   {icmp,<<11,0,111,113,0,17,0,0,69,96,0,84,128,119,64,0,1,
+%%           1,125,...>>}},
+%%  timeout,timeout,timeout,timeout,timeout,timeout,timeout,
+%%  timeout,timeout,
+%%  {{173,194,195,100},
+%%   975,
+%%   {icmp,<<0,0,184,52,205,52,0,0,32,...>>}}]
+%% ```
+-spec host(inet:socket_address() | inet:hostname()) ->
+    [{inet:socket_address(), MicroSeconds :: integer(), {icmp | udp, binary()}} | timeout].
 host(Host) ->
     host(Host, []).
 
-% @doc Perform a traceroute to a destination with options.
-%
-% ICMP and UDP probes are supported. ICMP probes are the default.
-%
-% max_hops is the maximum TTL (default: 30)
-%
-% Set the time in milliseconds to wait for a response using the
-% timeout option (default: 1000 ms).  WARNING: if the response
-% arrives after the timeout, tracert will insert spurious entries
-% into the path.
-%
-% tracert will not spawn the setuid helper if the {setuid, false}
-% option is used. In this case, beam must either be running as
-% root or have the cap_net_raw privileges under Linux.
-%
-% The {sport, Port} option sets the initial source port for UDP
-% probes. The port will be incremented by 1 for each subsequent
-% probe (default: random high port).  For ICMP probes, the ICMP
-% ID field will be set to this value.
-%
-% The return value is an ordered list of tuples:
-%
-% * Address: the source address responding to the probe
-%
-% * MicroSeconds: time elapsed between the probe and receiving
-%   the response
-%
-% * Protocol: icmp or udp
-%
-% * Protocol data: a binary representing the received packet
-%   contents
+%% @doc Perform a traceroute to a destination with options.
+%%
+%% ICMP and UDP probes are supported. ICMP probes are the default.
+%%
+%% max_hops is the maximum TTL (default: 30)
+%%
+%% Set the time in milliseconds to wait for a response using the
+%% timeout option (default: 1000 ms).  WARNING: if the response
+%% arrives after the timeout, tracert will insert spurious entries
+%% into the path.
+%%
+%% tracert will not spawn the setuid helper if the `{setuid, false}'
+%% option is used. In this case, beam must either be running as
+%% root or have the cap_net_raw privileges under Linux.
+%%
+%% The {sport, Port} option sets the initial source port for UDP
+%% probes. The port will be incremented by 1 for each subsequent
+%% probe (default: random high port).  For ICMP probes, the ICMP
+%% ID field will be set to this value.
+%%
+%% The return value is an ordered list of tuples:
+%%
+%% * Address: the source address responding to the probe
+%%
+%% * MicroSeconds: time elapsed between the probe and receiving
+%%   the response
+%%
+%% * Protocol: icmp or udp
+%%
+%% * Protocol data: a binary representing the received packet
+%%   contents
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> tracert:host("google.com", [{protocol, udp}]).
+%% [timeout,
+%%  {{142,250,57,212},
+%%   3671,
+%%   {icmp,<<11,0,0,16,0,0,0,0,69,96,0,28,1,92,64,0,1,17,109,
+%%           31,10,128,...>>}},
+%%  {{142,250,231,47},
+%%   2081,
+%%   {icmp,<<11,0,255,254,0,17,0,0,69,96,0,28,1,93,64,0,1,17,
+%%           109,30,10,...>>}},
+%%  {{142,251,236,131},
+%%   1322,
+%%   {icmp,<<11,0,255,254,0,17,0,0,69,96,0,28,1,94,64,0,1,17,
+%%           109,29,...>>}},
+%%  {{108,170,234,239},
+%%   3121,
+%%   {icmp,<<11,0,255,254,0,17,0,0,69,96,0,28,1,95,64,0,1,17,
+%%           109,...>>}},
+%%  timeout,timeout,timeout,timeout,timeout,timeout,timeout,
+%%  timeout,timeout,
+%%  {{64,233,191,139},917,{icmp,<<3,3,8,13,0,0,0,0,69,...>>}}]
+%% '''
+-spec host(inet:socket_address() | inet:hostname(), [option()]) ->
+    [{inet:socket_address(), MicroSeconds :: integer(), {icmp | udp, binary()}} | timeout].
 host(Host, Options) ->
     {ok, Socket} = open(Options),
     Path = host(Socket, Host, Options),
     close(Socket),
     Path.
 
-host(Ref, Host, Options) ->
+-spec host(socket(), inet:socket_address() | inet:hostname(), [option()]) ->
+    [{inet:socket_address(), MicroSeconds :: integer(), {icmp | udp, binary()}} | timeout].
+host(Socket, Host, Options) ->
     State = proplist_to_record(Options),
     #state{family = Family} = State,
     {ok, [Daddr | _]} = gen_icmp:parse(Family, Host),
-    ok = gen_server:call(Ref, {handler, State#state.handler}, infinity),
-    trace(Ref, State#state{daddr = Daddr}).
+    ok = gen_server:call(Socket, {handler, State#state.handler}, infinity),
+    trace(Socket, State#state{daddr = Daddr}).
 
 trace(Ref, State) ->
     flush_events(Ref),

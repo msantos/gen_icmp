@@ -1110,7 +1110,7 @@ addr_list(Family, Hosts, Multi) ->
 %% 5> gen_icmp:parse("foo").
 %% {error,nxdomain}
 %% '''
--spec parse([inet:socket_address() | inet:hostname()]) ->
+-spec parse(inet:socket_address() | inet:hostname()) ->
     {ok, [inet:socket_address()]} | {error, inet:posix()}.
 parse(Addr) ->
     parse(inet, Addr).
@@ -1127,7 +1127,7 @@ parse(Addr) ->
 %% {ok,[{9734,18176,0,0,0,0,26640,34021},
 %%      {9734,18176,0,0,0,0,26640,34277}]}
 %% '''
--spec parse(inet | inet6, [inet:socket_address() | inet:hostname()]) ->
+-spec parse(inet | inet6, inet:socket_address() | inet:hostname()) ->
     {ok, [inet:socket_address()]} | {error, inet:posix()}.
 parse(Family, Addr) when is_list(Addr) ->
     parse_or_resolve(Family, Addr, inet_parse:address(Addr));
