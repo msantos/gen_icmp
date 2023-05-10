@@ -140,43 +140,13 @@
 %%  {{173,194,195,100},
 %%   975,
 %%   {icmp,<<0,0,184,52,205,52,0,0,32,...>>}}]
-%% ```
+%% '''
 -spec host(inet:socket_address() | inet:hostname()) ->
     [{inet:socket_address(), MicroSeconds :: integer(), {icmp | udp, binary()}} | timeout].
 host(Host) ->
     host(Host, []).
 
 %% @doc Perform a traceroute to a destination with options.
-%%
-%% ICMP and UDP probes are supported. ICMP probes are the default.
-%%
-%% max_hops is the maximum TTL (default: 30)
-%%
-%% Set the time in milliseconds to wait for a response using the
-%% timeout option (default: 1000 ms).  WARNING: if the response
-%% arrives after the timeout, tracert will insert spurious entries
-%% into the path.
-%%
-%% tracert will not spawn the setuid helper if the `{setuid, false}'
-%% option is used. In this case, beam must either be running as
-%% root or have the cap_net_raw privileges under Linux.
-%%
-%% The {sport, Port} option sets the initial source port for UDP
-%% probes. The port will be incremented by 1 for each subsequent
-%% probe (default: random high port).  For ICMP probes, the ICMP
-%% ID field will be set to this value.
-%%
-%% The return value is an ordered list of tuples:
-%%
-%% * Address: the source address responding to the probe
-%%
-%% * MicroSeconds: time elapsed between the probe and receiving
-%%   the response
-%%
-%% * Protocol: icmp or udp
-%%
-%% * Protocol data: a binary representing the received packet
-%%   contents
 %%
 %% == Examples ==
 %%
@@ -211,6 +181,56 @@ host(Host, Options) ->
     close(Socket),
     Path.
 
+%% @doc Perform a traceroute to a destination
+%%
+%% ICMP and UDP probes are supported. ICMP probes are the default.
+%%
+%% max_hops is the maximum TTL (default: 30)
+%%
+%% Set the time in milliseconds to wait for a response using the
+%% timeout option (default: 1000 ms).  WARNING: if the response
+%% arrives after the timeout, tracert will insert spurious entries
+%% into the path.
+%%
+%% tracert will not spawn the setuid helper if the `{setuid, false}'
+%% option is used. In this case, beam must either be running as
+%% root or have the cap_net_raw privileges under Linux.
+%%
+%% The {sport, Port} option sets the initial source port for UDP
+%% probes. The port will be incremented by 1 for each subsequent
+%% probe (default: random high port).  For ICMP probes, the ICMP
+%% ID field will be set to this value.
+%%
+%% The return value is an ordered list of tuples:
+%%
+%% * Address: the source address responding to the probe
+%%
+%% * MicroSeconds: time elapsed between the probe and receiving
+%%   the response
+%%
+%% * Protocol: icmp or udp
+%%
+%% * Protocol data: a binary representing the received packet
+%%   contents
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, Socket} = tracert:open().
+%% {ok,<0.164.0>}
+%% 2> Path = tracert:host(Socket, "8.8.8.8", []).
+%% [timeout,timeout,timeout,timeout,timeout,timeout,timeout,
+%%  timeout,timeout,timeout,
+%%  {{8,8,8,8},
+%%   750,
+%%   {icmp,<<0,0,231,24,158,80,0,0,32,33,34,35,36,...>>}}]
+%% 3> tracert:close(Socket).
+%% ok
+%% 4> tracert:path(Path).
+%% [timeout,timeout,timeout,timeout,timeout,timeout,timeout,
+%%  timeout,timeout,timeout,
+%%  {{8,8,8,8},750,echoreply}]
+%% '''
 -spec host(socket(), inet:socket_address() | inet:hostname(), [option()]) ->
     [{inet:socket_address(), MicroSeconds :: integer(), {icmp | udp, binary()}} | timeout].
 host(Socket, Host, Options) ->
@@ -316,18 +336,67 @@ trace(
 probe(Ref, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
     gen_server:call(Ref, {send, Daddr, Dport, TTL, Packet}, infinity).
 
+%% @doc Open an ICMP socket for traceroute
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, Socket} = tracert:open().
+%% {ok,<0.164.0>}
+%% '''
+-spec open() -> {ok, socket()} | {error, system_limit | inet:posix()}.
 open() ->
     open([]).
+
+%% @doc Open an ICMP socket for traceroute
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, Socket} = tracert:open([inet6, {protocol, udp}]).
+%% {ok,<0.289.0>}
+%% '''
+-spec open([option()]) -> {ok, socket()} | {error, system_limit | inet:posix()}.
 open(Options) ->
     start_link(Options).
 
-close(Ref) ->
-    gen_server:call(Ref, close).
+%% @doc Close the ICMP socket
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, Socket} = tracert:open().
+%% {ok,<0.164.0>}
+%% 2> tracert:close(Socket).
+%% ok
+%% '''
+-spec close(socket()) -> ok.
+close(Socket) ->
+    gen_server:call(Socket, close).
 
-% @doc Convert trace response to atoms.
-%
-% Convert the list of binaries returned by host/1,2,3 to atoms
-% representing the ICMP response codes and UDP errors.
+%% @doc Convert trace response to atoms.
+%%
+%% Convert the list of binaries returned by host/1,2,3 to atoms
+%% representing the ICMP response codes and UDP errors.
+%%
+%% == Examples ==
+%%
+%% ```
+%% 1> {ok, Socket} = tracert:open().
+%% {ok,<0.164.0>}
+%% 2> Path = tracert:host(Socket, "8.8.8.8", []).
+%% [timeout,timeout,timeout,timeout,timeout,timeout,timeout,
+%%  timeout,timeout,timeout,
+%%  {{8,8,8,8},
+%%   750,
+%%   {icmp,<<0,0,231,24,158,80,0,0,32,33,34,35,36,...>>}}]
+%% 3> tracert:close(Socket).
+%% ok
+%% 4> tracert:path(Path).
+%% [timeout,timeout,timeout,timeout,timeout,timeout,timeout,
+%%  timeout,timeout,timeout,
+%%  {{8,8,8,8},750,echoreply}]
+%% '''
 path(Path) when is_list(Path) ->
     path(Path, [response(icmp)]).
 
