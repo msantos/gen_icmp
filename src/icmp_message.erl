@@ -39,15 +39,15 @@
     code/1
 ]).
 
+%% @doc Convert an ICMP type to an integer.
 type_to_uint8(Type) when is_integer(Type) -> Type;
 type_to_uint8(Type) when is_atom(Type) -> type(Type).
 
+%% @doc Convert an ICMP code to an integer.
 code_to_uint8(Code) when is_integer(Code) -> Code;
 code_to_uint8(Code) when is_atom(Code) -> code(Code).
 
-%%
-%% ICMP control message: types
-%%
+%% @doc ICMP control message: types
 type(?ICMP_ECHOREPLY) -> echoreply;
 type(?ICMP_DEST_UNREACH) -> dest_unreach;
 type(?ICMP_SOURCE_QUENCH) -> source_quench;
@@ -75,10 +75,7 @@ type(info_reply) -> ?ICMP_INFO_REPLY;
 type(address) -> ?ICMP_ADDRESS;
 type(addressreply) -> ?ICMP_ADDRESSREPLY.
 
-%%
-%% ICMP control message: codes
-%%
-
+%% @doc ICMP control message: codes
 % destination unreachable
 code(unreach_net) ->
     ?ICMP_UNREACH_NET;

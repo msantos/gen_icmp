@@ -333,8 +333,11 @@ trace(
         trace(Ref, State#state{ttl = TTL + 1}, [timeout | Acc])
     end.
 
-probe(Ref, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
-    gen_server:call(Ref, {send, Daddr, Dport, TTL, Packet}, infinity).
+%% @doc Send a traceroute probe packet
+-spec probe(socket(), inet:socket_address(), inet:socket_address(), non_neg_integer(), binary()) ->
+    ok | {error, inet:posix()}.
+probe(Socket, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
+    gen_server:call(Socket, {send, Daddr, Dport, TTL, Packet}, infinity).
 
 %% @doc Open an ICMP socket for traceroute
 %%
@@ -406,6 +409,7 @@ path(Path, [Fun | Funs]) when is_list(Path), is_function(Fun) ->
     Mapped = lists:map(Fun, Path),
     path(Mapped, Funs).
 
+%% @private
 response(icmp) ->
     fun
         ({{_, _, _, _} = Saddr, Microsec, {icmp, Packet}}) ->
@@ -421,12 +425,13 @@ response(icmp) ->
 %%-------------------------------------------------------------------------
 %%% Callbacks
 %%-------------------------------------------------------------------------
-% @private
+
+%% @private
 start_link(Options) ->
     Pid = self(),
     gen_server:start_link(?MODULE, [Pid, Options], []).
 
-% @private
+%% @private
 init([Pid, Options]) ->
     process_flag(trap_exit, true),
 
@@ -455,7 +460,7 @@ init([Pid, Options]) ->
         rs = RS
     }}.
 
-% @private
+%% @private
 handle_call(close, {Pid, _}, #state{pid = Pid} = State) ->
     {stop, normal, ok, State};
 handle_call(sport, _From, #state{sport = Sport} = State) ->
@@ -509,12 +514,12 @@ handle_call(Request, From, State) ->
     error_logger:info_report([{call, Request}, {from, From}, {state, State}]),
     {reply, ok, State}.
 
-% @private
+%% @private
 handle_cast(Msg, State) ->
     error_logger:info_report([{cast, Msg}, {state, State}]),
     {noreply, State}.
 
-% @private
+%% @private
 handle_info(
     {icmp, Socket, Daddr, _TTL, Data},
     #state{
@@ -534,19 +539,21 @@ handle_info(Info, State) ->
     error_logger:info_report([{info, Info}, {state, State}]),
     {noreply, State}.
 
-% @private
+%% @private
 terminate(_Reason, #state{rs = RS, ws = WS}) ->
     procket:close(WS),
     gen_icmp:close(RS),
     ok.
 
-% @private
+%% @private
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%-------------------------------------------------------------------------
 %%% Utility Functions
 %%-------------------------------------------------------------------------
+
+%% @private
 socket(Family, Protocol0, Saddr, Sport) ->
     {Protocol, Type, Port} =
         case {Family, Protocol0} of
@@ -614,6 +621,7 @@ bind_socket(Socket, inet6, {SA1, SA2, SA3, SA4, SA5, SA6, SA7, SA8}, Sport) ->
         Error -> Error
     end.
 
+%% @private
 proplist_to_record(Options) ->
     Default = #state{},
 
