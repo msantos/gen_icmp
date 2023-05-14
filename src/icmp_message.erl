@@ -28,6 +28,7 @@
 %%% NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 %%% SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+%% @private
 -module(icmp_message).
 -include_lib("pkt/include/pkt.hrl").
 
@@ -39,15 +40,17 @@
     code/1
 ]).
 
-%% @doc Convert an ICMP type to an integer.
+%% Convert an ICMP type to an integer.
+-spec type_to_uint8(atom() | integer()) -> gen_icmp:uint8_t().
 type_to_uint8(Type) when is_integer(Type) -> Type;
 type_to_uint8(Type) when is_atom(Type) -> type(Type).
 
-%% @doc Convert an ICMP code to an integer.
+%% Convert an ICMP code to an integer.
+-spec code_to_uint8(atom() | integer()) -> gen_icmp:uint8_t().
 code_to_uint8(Code) when is_integer(Code) -> Code;
 code_to_uint8(Code) when is_atom(Code) -> code(Code).
 
-%% @doc ICMP control message: types
+%% ICMP control message: types
 type(?ICMP_ECHOREPLY) -> echoreply;
 type(?ICMP_DEST_UNREACH) -> dest_unreach;
 type(?ICMP_SOURCE_QUENCH) -> source_quench;
@@ -75,7 +78,7 @@ type(info_reply) -> ?ICMP_INFO_REPLY;
 type(address) -> ?ICMP_ADDRESS;
 type(addressreply) -> ?ICMP_ADDRESSREPLY.
 
-%% @doc ICMP control message: codes
+%% ICMP control message: codes
 % destination unreachable
 code(unreach_net) ->
     ?ICMP_UNREACH_NET;
