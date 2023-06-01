@@ -432,12 +432,12 @@ To compile ptun:
 Host1 (1.1.1.1) listens for TCP on port 8787 and forwards the data
 over ICMP:
 
-    erl -noshell -pa ebin deps/*/ebin -eval 'ptun:server({2,2,2,2},8787)' -s init stop
+    erl -noshell -pa ebin deps/*/ebin -eval 'ptun:server({2,2,2,2},8787)' -s erlang halt
 
 Host2 (2.2.2.2) receives ICMP echo requests and opens a TCP connection
 to 127.0.0.1:22:
 
-    erl -noshell -pa ebin deps/*/ebin -eval 'ptun:client({1,1,1,1},22)' -s init stop
+    erl -noshell -pa ebin deps/*/ebin -eval 'ptun:client({1,1,1,1},22)' -s erlang halt
 
 To use the proxy on host1:
 
