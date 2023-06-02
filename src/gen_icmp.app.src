@@ -1,11 +1,10 @@
 {application, gen_icmp, [
     {description, "Interface to ICMP sockets"},
-    {vsn, "0.5.6"},
+    {vsn, "0.6.0"},
     {registered, []},
     {applications, [kernel, stdlib]},
     {env, []},
     {modules, []},
-    {licenses, ["BSD-3"]},
-    {maintainers, ["Michael Santos"]},
+    {licenses, ["BSD-3-Clause"]},
     {links, [{"Github", "https://github.com/msantos/gen_icmp"}]}
 ]}.

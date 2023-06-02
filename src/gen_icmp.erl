@@ -173,7 +173,7 @@
     h = #icmp6{}
 }).
 
-%% @doc Open an ICMP socket
+%% @doc Open an ICMP socket.
 %%
 %% By default, the ICMP socket is opened in {active,false} mode. No
 %% packets will be received by the socket. setopts/2 can be used
@@ -219,7 +219,7 @@
 open() ->
     open([], []).
 
-%% @doc Open an ICMP socket with raw socket options
+%% @doc Open an ICMP socket with raw socket options.
 %%
 %% See the https://github.com/msantos/procket for the raw socket options
 %% and for instructions on setting up the setuid helper.
@@ -234,7 +234,7 @@ open() ->
 open(RawOpts) ->
     open(RawOpts, []).
 
-%% @doc Open an ICMP socket with options
+%% @doc Open an ICMP socket with options.
 %%
 %% == Examples ==
 %%
@@ -247,7 +247,7 @@ open(RawOpts) ->
 open(RawOpts, SockOpts) ->
     start_link(RawOpts, SockOpts).
 
-%% @doc Close the ICMP socket
+%% @doc Close the ICMP socket.
 %%
 %% == Examples ==
 %%
@@ -261,7 +261,7 @@ open(RawOpts, SockOpts) ->
 close(Socket) when is_pid(Socket) ->
     gen_server:call(Socket, close, infinity).
 
-%% @doc Send data via an ICMP socket
+%% @doc Send data via an ICMP socket.
 %%
 %% Like the gen_udp and gen_tcp modules, any process can send ICMP
 %% packets but only the owner will receive the responses.
@@ -291,7 +291,7 @@ close(Socket) when is_pid(Socket) ->
 send(Socket, Address, Packet) when is_pid(Socket) ->
     gen_server:call(Socket, {send, Address, Packet}, infinity).
 
-%% @doc Read data from an ICMP socket
+%% @doc Read data from an ICMP socket.
 %%
 %% This function receives a packet from a socket in passive mode.
 %%
@@ -315,7 +315,7 @@ send(Socket, Address, Packet) when is_pid(Socket) ->
 recv(Socket, Length) ->
     recv(Socket, Length, infinity).
 
-%% @doc Read data from an ICMP socket with timeout
+%% @doc Read data from an ICMP socket with timeout.
 %%
 %% The optional Timeout parameter specifies a timeout in
 %% milliseconds. The default value is infinity.
@@ -342,7 +342,7 @@ recv(Socket, Length) ->
 recv(Socket, Length, Timeout) ->
     gen_server:call(Socket, {recv, Length, Timeout}, infinity).
 
-%% @doc Change the controlling process of the ICMP socket
+%% @doc Change the controlling process of the ICMP socket.
 %%
 %% Change the process owning the socket. Allows another process to
 %% receive the ICMP responses.
@@ -350,7 +350,7 @@ recv(Socket, Length, Timeout) ->
 controlling_process(Socket, Pid) when is_pid(Socket), is_pid(Pid) ->
     gen_server:call(Socket, {controlling_process, Pid}, infinity).
 
-%% @doc Set socket options
+%% @doc Set socket options.
 %%
 %% For options, see the inet man page. Simply calls inet:setopts/2 on
 %% the gen_udp socket.
@@ -370,7 +370,7 @@ controlling_process(Socket, Pid) when is_pid(Socket), is_pid(Pid) ->
 setopts(Socket, Options) when is_pid(Socket), is_list(Options) ->
     gen_server:call(Socket, {setopts, Options}, infinity).
 
-%% @doc Get socket family
+%% @doc Get socket family.
 %%
 %% Returns the socket family: `inet' (IPv4), `inet6' (IPv6)
 %%
@@ -386,7 +386,7 @@ setopts(Socket, Options) when is_pid(Socket), is_list(Options) ->
 family(Socket) when is_pid(Socket) ->
     gen_server:call(Socket, family, infinity).
 
-%% @doc Get underlying file descriptor for socket
+%% @doc Get underlying file descriptor for socket.
 %%
 %% == Examples ==
 %%
@@ -400,7 +400,7 @@ family(Socket) when is_pid(Socket) ->
 getfd(Socket) when is_pid(Socket) ->
     gen_server:call(Socket, getfd, infinity).
 
-%% @doc Get ICMPv6 socket filter
+%% @doc Get ICMPv6 socket filter.
 %%
 %% Retrieves the ICMPv6 filter for a socket. For ICMPv4
 %% sockets, the atom `unsupported' is returned.
@@ -418,7 +418,7 @@ getfd(Socket) when is_pid(Socket) ->
 filter(Socket) when is_pid(Socket) ->
     gen_server:call(Socket, filter, infinity).
 
-%% @doc Set ICMPv6 socket filter
+%% @doc Set ICMPv6 socket filter.
 %%
 %% Sets an ICMPv6 filter on a socket. For ICMPv4 sockets, the atom
 %% `unsupported' is returned.
@@ -437,7 +437,7 @@ filter(Socket) when is_pid(Socket) ->
 filter(Socket, Filter) when is_pid(Socket) ->
     gen_server:call(Socket, {filter, Filter}, infinity).
 
-%% @doc Send an ICMP ECHO_REQUEST
+%% @doc Send an ICMP ECHO_REQUEST.
 %%
 %% ping/1 is a convenience function to send a single ping
 %% packet. The argument to ping/1 can be either a hostname or a
@@ -467,7 +467,7 @@ filter(Socket, Filter) when is_pid(Socket) ->
 ping(Host) ->
     ping(Host, []).
 
-%% @doc Send an ICMP ECHO_REQUEST with options
+%% @doc Send an ICMP ECHO_REQUEST with options.
 %%
 %% Ping a host or a list of hosts.
 %%
@@ -505,7 +505,7 @@ ping(Hosts, Options) ->
     gen_icmp:close(Socket),
     Res.
 
-%% @doc Send an ICMP ECHO_REQUEST
+%% @doc Send an ICMP ECHO_REQUEST.
 %%
 %% To prevent the process mailbox from being flooded with ICMP
 %% messages, ping/3 will put the socket into `{active,false}' mode
@@ -816,7 +816,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Utility Functions
 %%-------------------------------------------------------------------------
 
-%% @doc Create an ICMP packet
+%% @doc Create an ICMP packet.
 %%
 %% Convenience function for creating arbitrary ICMP packets. This
 %% function will calculate the ICMP checksum and insert it into the
@@ -867,7 +867,7 @@ packet(
 packet(Header, Payload) when is_list(Header) ->
     packet(inet, Header, Payload).
 
-%% @doc Construct an ICMP or ICMPv6 packet payload
+%% @doc Construct an ICMP or ICMPv6 packet payload.
 %%
 %% == Examples ==
 %%
@@ -954,7 +954,7 @@ packet(inet6, Header, Payload) when is_list(Header), is_binary(Payload) ->
 
     packet(Pseudo, Payload).
 
-%% @doc Generate ICMP ECHO_REQUEST payload
+%% @doc Generate ICMP ECHO_REQUEST payload.
 %%
 %% Creates an ICMP echo packet with an 8 byte timestamp and a
 %% payload consisting of ASCII 32 to 79.
@@ -971,7 +971,7 @@ echo(Family, Id, Seq) ->
     % Pad packet to 64 bytes
     echo(Family, Id, Seq, payload(echo)).
 
-%% @doc Generate ICMP ECHO_REQUEST with user specified payload
+%% @doc Generate ICMP ECHO_REQUEST with user specified payload.
 %%
 %% Creates an ICMP echo packet with the results of
 %% erlang:monotonic_time(micro_seconds) used as the timestamp and a user
@@ -1015,7 +1015,7 @@ payload(echo) ->
     USec = gettime(),
     <<USec:8/signed-integer-unit:8, (list_to_binary(lists:seq($\s, $O)))/binary>>.
 
-%% @doc Set the TTL on a file descriptor
+%% @doc Set the TTL on a file descriptor.
 %%
 %% == Examples ==
 %%
@@ -1031,7 +1031,7 @@ set_ttl(FD, inet, TTL) ->
 set_ttl(FD, inet6, TTL) ->
     procket:setsockopt(FD, ?IPPROTO_IPV6, ipv6_unicast_hops(), <<TTL:32/native>>).
 
-%% @doc Get the TTL for a file descriptor
+%% @doc Get the TTL for a file descriptor.
 %%
 %% == Examples ==
 %%
@@ -1090,7 +1090,7 @@ addr_list(Family, Hosts, Multi) ->
         Hosts
     ).
 
-%% @doc Parse or resolve an IPv4 host identifier
+%% @doc Parse or resolve an IPv4 host identifier.
 %%
 %% == Examples ==
 %%
@@ -1115,7 +1115,7 @@ addr_list(Family, Hosts, Multi) ->
 parse(Addr) ->
     parse(inet, Addr).
 
-%% @doc Parse or resolve a host identifier
+%% @doc Parse or resolve a host identifier.
 %%
 %% == Examples ==
 %%
@@ -1134,7 +1134,7 @@ parse(Family, Addr) when is_list(Addr) ->
 parse(_Family, Addr) when is_tuple(Addr) ->
     {ok, [Addr]}.
 
-%% @doc IPv6 ICMP filtering: allow all ICMP types
+%% @doc IPv6 ICMP filtering: allow all ICMP types.
 %%
 %% @see icmp6_filter_setblock/2
 -spec icmp6_filter_setpassall() -> icmp6_filter().
@@ -1149,7 +1149,7 @@ icmp6_filter_setpassall() ->
                 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff, 16#ff>>
     end.
 
-%% @doc ICMPv6 filtering: block all ICMP types
+%% @doc ICMPv6 filtering: block all ICMP types.
 %%
 %% @see icmp6_filter_setpass/2
 -spec icmp6_filter_setblockall() -> icmp6_filter().
@@ -1164,7 +1164,7 @@ icmp6_filter_setblockall() ->
             <<0:256>>
     end.
 
-%% @doc Update a filter to allow an ICMPv6 type
+%% @doc Update a filter to allow an ICMPv6 type.
 %%
 %% == Examples ==
 %%
@@ -1194,7 +1194,7 @@ icmp6_filter_setpass(Type0, <<_:256>> = Filter) ->
         end,
     array_set(Offset, Fun, Filter).
 
-%% @doc Update a filter to block an ICMPv6 type
+%% @doc Update a filter to block an ICMPv6 type.
 %%
 %% == Examples ==
 %%
@@ -1228,7 +1228,7 @@ icmp6_filter_setblock(Type0, <<_:256>> = Filter) ->
         end,
     array_set(Offset, Fun, Filter).
 
-%% @doc Test if a filter allows an ICMPv6 type
+%% @doc Test if a filter allows an ICMPv6 type.
 %%
 %% == Examples ==
 %%
@@ -1255,7 +1255,7 @@ icmp6_filter_willpass(Type0, <<_:256>> = Filter) ->
         {unix, _} -> El band Value =/= 0
     end.
 
-%% @doc Test if a filter blocks an ICMPv6 type
+%% @doc Test if a filter blocks an ICMPv6 type.
 %%
 %% == Examples ==
 %%

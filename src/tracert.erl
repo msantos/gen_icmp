@@ -28,7 +28,7 @@
 %%% NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 %%% SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-%% @doc Perform a traceroute
+%% @doc Perform a traceroute.
 %%
 %% Send a probe packet with the time to live set from 1. Monitor
 %% an ICMP socket for ICMP responses or timeout.
@@ -181,7 +181,7 @@ host(Host, Options) ->
     close(Socket),
     Path.
 
-%% @doc Perform a traceroute to a destination
+%% @doc Perform a traceroute to a destination.
 %%
 %% ICMP and UDP probes are supported. ICMP probes are the default.
 %%
@@ -333,7 +333,7 @@ trace(
         trace(Ref, State#state{ttl = TTL + 1}, [timeout | Acc])
     end.
 
-%% @doc Send a traceroute probe packet
+%% @doc Send a traceroute probe packet.
 -spec probe(socket(), inet:socket_address(), inet:socket_address(), non_neg_integer(), binary()) ->
     ok | {error, inet:posix()}.
 probe(Socket, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
@@ -351,7 +351,7 @@ probe(Socket, Daddr, Dport, TTL, Packet) when is_binary(Packet) ->
 open() ->
     open([]).
 
-%% @doc Open an ICMP socket for traceroute
+%% @doc Open an ICMP socket for traceroute.
 %%
 %% == Examples ==
 %%
@@ -363,7 +363,7 @@ open() ->
 open(Options) ->
     start_link(Options).
 
-%% @doc Close the ICMP socket
+%% @doc Close the ICMP socket.
 %%
 %% == Examples ==
 %%
