@@ -1,3 +1,6 @@
+[![Package Version](https://img.shields.io/hexpm/v/gen_icmp)](https://hex.pm/packages/gen_icmp)
+[![Hex Docs](https://img.shields.io/badge/hex-docs)](https://hexdocs.pm/gen_icmp/)
+
 gen\_icmp aspires to be a simple interface for using ICMP and ICMPv6
 sockets in Erlang, just like gen\_tcp and gen\_udp do for their protocol
 types; incidentally messing up Google searches for whomever someday
