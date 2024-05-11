@@ -1,6 +1,6 @@
 {application, gen_icmp, [
     {description, "Interface to ICMP sockets"},
-    {vsn, "0.6.1"},
+    {vsn, "0.6.2"},
     {registered, []},
     {applications, [kernel, stdlib]},
     {env, []},
