@@ -1363,6 +1363,8 @@ ping_loop(
                                 {Id, Seq, TTL, undefined}, Payload}
                             | Acc
                         ]};
+                    {value, _NoMatch, _NHosts} ->
+                        {Hosts, Acc};
                     false ->
                         {Hosts, Acc}
                 end,
@@ -1396,7 +1398,6 @@ ping_loop(
                 ?ICMP6_ECHO_REQUEST:8, 0:8, _Checksum2:16, Id:16, Seq:16, _/binary>> = Data} ->
             <<_ICMPHeader:8/bytes, Payload/binary>> = Data,
             DA = {DA1, DA2, DA3, DA4, DA5, DA6, DA7, DA8},
-            {value, {ok, Addr, DA, Seq}, Hosts2} = lists:keytake(Seq, 4, Hosts),
             {Hosts2, Result} =
                 case lists:keytake(Seq, 4, Hosts) of
                     {value, {ok, Addr, DA, Seq}, NHosts} ->
@@ -1405,6 +1406,8 @@ ping_loop(
                                 {Id, Seq, TTL, undefined}, Payload}
                             | Acc
                         ]};
+                    {value, _NoMatch, _NHosts} ->
+                        {Hosts, Acc};
                     false ->
                         {Hosts, Acc}
                 end,
