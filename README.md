@@ -15,7 +15,7 @@ https://github.com/msantos/procket/blob/master/src/icmp.erl
 
 ## EXPORTS
 
-```erlang
+```
 open() -> {ok, Socket}
 open(SocketOptions) -> {ok, Socket}
 open(RawOptions, SocketOptions) -> {ok, Socket}
@@ -285,7 +285,7 @@ icmp6_filter_willblock(Type, Filter) -> true | false
 
 tracert is an Erlang traceroute implementation built using gen_icmp.
 
-```erlang
+```
 host(Host) -> Path
 host(Host, Options) -> Path
 host(Socket, Host, Options) -> Path
