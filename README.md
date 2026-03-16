@@ -19,8 +19,7 @@ https://github.com/msantos/procket/blob/master/src/icmp.erl
 rebar3 do clean, compile, ct
 ```
 
-Also see the README for procket for additional setup (the procket
-executable needs superuser privileges).
+Also see the README for procket for [additional setup](https://github.com/msantos/procket?tab=readme-ov-file#setuid-vs-sudo-vs-capabilities) (the procket executable needs superuser privileges).
 
 ## DOCUMENTATION
 
