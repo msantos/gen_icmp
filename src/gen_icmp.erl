@@ -221,7 +221,7 @@ open() ->
 
 %% @doc Open an ICMP socket with raw socket options.
 %%
-%% See the https://github.com/msantos/procket for the raw socket options
+%% See https://github.com/msantos/procket?tab=readme-ov-file#setuid-vs-sudo-vs-capabilities for the raw socket options
 %% and for instructions on setting up the setuid helper.
 %%
 %% == Examples ==
